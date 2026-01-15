@@ -3,8 +3,60 @@
 @tailwind utilities;
 
 @layer base {
-  /* Enterprise Dark Theme - Matching website design */
+  /* Light Theme - Clean, professional with cyan/teal accents */
   :root {
+    /* Background: Clean off-white */
+    --background: 210 20% 98%;
+    /* Foreground: Dark navy for readability */
+    --foreground: 222 30% 12%;
+
+    /* Cards: Pure white for depth against off-white background */
+    --card: 0 0% 100%;
+    --card-foreground: 222 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 30% 12%;
+
+    /* Primary: Electric cyan - slightly darker for light mode contrast */
+    --primary: 190 90% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Teal/Green - slightly darker for light mode */
+    --secondary: 160 84% 32%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted: Light grays */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 96%;
+    --accent-foreground: 222 30% 12%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 190 90% 38%;
+
+    /* Slightly squarer for enterprise feel */
+    --radius: 0.3rem;
+
+    /* Chart colors */
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    /* Font families */
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  /* Dark Theme - Rich navy with cyan/teal accents (matching website) */
+  .dark {
     /* Background: Rich, professional dark navy */
     --background: 222 30% 12%;
     /* Foreground: High contrast off-white */
@@ -25,7 +77,7 @@
     --secondary: 160 84% 39%;
     --secondary-foreground: 0 0% 100%;
 
-    /* Muted: Lighter grays for readability */
+    /* Muted: Darker grays for dark mode */
     --muted: 217 20% 20%;
     --muted-foreground: 215 15% 75%;
 
@@ -35,44 +87,6 @@
     --destructive: 0 62% 30%;
     --destructive-foreground: 210 20% 98%;
 
-    --border: 217 20% 20%;
-    --input: 217 20% 20%;
-    --ring: 190 90% 45%;
-
-    /* Slightly squarer for enterprise feel */
-    --radius: 0.3rem;
-
-    /* Chart colors */
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-
-    /* Font families */
-    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-    --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  }
-
-  /* Dark mode uses same values (dark-first design) */
-  .dark {
-    --background: 222 30% 12%;
-    --foreground: 210 20% 98%;
-    --card: 222 30% 15%;
-    --card-foreground: 210 20% 98%;
-    --popover: 222 30% 15%;
-    --popover-foreground: 210 20% 98%;
-    --primary: 190 90% 45%;
-    --primary-foreground: 222 47% 10%;
-    --secondary: 160 84% 39%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 217 20% 20%;
-    --muted-foreground: 215 15% 75%;
-    --accent: 217 20% 20%;
-    --accent-foreground: 210 20% 98%;
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 210 20% 98%;
     --border: 217 20% 20%;
     --input: 217 20% 20%;
     --ring: 190 90% 45%;
@@ -108,8 +122,12 @@
     box-shadow: 0 0 10px hsla(var(--primary), 0.3);
   }
   .glass-panel {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  .dark .glass-panel {
+    background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
   .gradient-text {
@@ -200,7 +218,7 @@
   white-space: pre-wrap;
 }
 
-/* Code syntax highlighting - github-dark theme (matching website) */
+/* Code syntax highlighting - Light mode (github-light theme) */
 .hljs {
   background: hsl(var(--muted)) !important;
   color: hsl(var(--foreground)) !important;
@@ -214,14 +232,14 @@
 
 .hljs-comment,
 .hljs-quote {
-  color: #8b949e !important;
+  color: #6a737d !important;
   font-style: italic;
 }
 
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-addition {
-  color: #ff7b72 !important;
+  color: #d73a49 !important;
 }
 
 .hljs-number,
@@ -230,7 +248,7 @@
 .hljs-literal,
 .hljs-doctag,
 .hljs-regexp {
-  color: #a5d6ff !important;
+  color: #032f62 !important;
 }
 
 .hljs-title,
@@ -238,7 +256,7 @@
 .hljs-name,
 .hljs-selector-id,
 .hljs-selector-class {
-  color: #d2a8ff !important;
+  color: #6f42c1 !important;
 }
 
 .hljs-attribute,
@@ -247,7 +265,7 @@
 .hljs-template-variable,
 .hljs-class .hljs-title,
 .hljs-type {
-  color: #ffa657 !important;
+  color: #e36209 !important;
 }
 
 .hljs-symbol,
@@ -258,12 +276,12 @@
 .hljs-selector-attr,
 .hljs-selector-pseudo,
 .hljs-link {
-  color: #79c0ff !important;
+  color: #005cc5 !important;
 }
 
 .hljs-built_in,
 .hljs-deletion {
-  color: #ffa198 !important;
+  color: #d73a49 !important;
 }
 
 .hljs-formula {
@@ -278,7 +296,7 @@
   font-weight: bold;
 }
 
-/* Dark mode uses same github-dark colors (dark-first design) */
+/* Dark mode - github-dark theme */
 .dark .hljs {
   background: hsl(var(--muted)) !important;
   color: hsl(var(--foreground)) !important;

@@ -8,8 +8,8 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro,z
     depends_on:
-      - enclava-backend
-      - enclava-frontend
+#      - enclava-backend
+#      - enclava-frontend
     networks:
       - enclava-net
     restart: unless-stopped

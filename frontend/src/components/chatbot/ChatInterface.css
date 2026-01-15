@@ -71,6 +71,41 @@
   }
 }
 
+/* Light mode styles for chat interface */
+.chat-message-assistant {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.chat-message-user {
+  /* User messages use primary color gradient */
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%);
+  color: white;
+}
+
+.chat-message-user * {
+  color: white !important;
+}
+
+.chat-input {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+
+.chat-input::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.chat-timestamp {
+  color: hsl(var(--muted-foreground));
+}
+
+.chat-thinking {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
 /* Dark mode improvements for chat interface - matching website theme */
 .dark .chat-message-assistant {
   background-color: hsl(var(--card)); /* dark navy card background */
@@ -189,4 +224,43 @@
 .dark .prose i,
 .dark .prose-sm i {
   color: hsl(var(--foreground)) !important;
+}
+
+/* Light mode markdown and prose styles */
+.markdown-content {
+  color: hsl(var(--foreground));
+}
+
+.markdown-content code {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+
+.markdown-content pre {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+
+.prose,
+.prose-sm {
+  color: hsl(var(--foreground));
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  color: hsl(var(--foreground));
+}
+
+.prose a {
+  color: hsl(var(--primary));
+}
+
+.prose a:hover {
+  color: hsl(var(--secondary));
 }
