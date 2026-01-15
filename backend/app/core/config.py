@@ -61,8 +61,15 @@ class Settings(BaseSettings):
         """Derive CORS origins from BASE_URL if not explicitly set"""
         if v is None:
             base_url = info.data.get("BASE_URL", "localhost")
-            # Support both HTTP and HTTPS for production environments
-            return [f"http://{base_url}", f"https://{base_url}"]
+            origins = [f"http://{base_url}", f"https://{base_url}"]
+            # Add development ports if base_url is localhost (without port)
+            if base_url == "localhost" or base_url.startswith("localhost:"):
+                origins.extend([
+                    "http://localhost:1080",  # Main nginx proxy
+                    "http://localhost:3000",  # Next.js default
+                    "http://localhost:3002",  # Next.js dev server
+                ])
+            return origins
         return v if isinstance(v, list) else [v]
 
     # CORS origins (derived from BASE_URL)

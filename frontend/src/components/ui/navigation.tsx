@@ -73,16 +73,9 @@ const Navigation = () => {
   // Build settings children based on permissions
   const settingsChildren = [
     { href: "/settings", label: "System Settings" },
-    { href: "/llm", label: "LLM Config" },
-    { href: "/rag-demo", label: "RAG Demo" },
-    { href: "/plugins", label: "Plugins" },
-    { href: "/prompt-templates", label: "Prompt Templates" },
+    { href: "/llm", label: "LLM" },
+    { href: "/admin/users", label: "Users" },
   ];
-
-  // Add admin link if user has admin access
-  if (hasAdminAccess) {
-    settingsChildren.push({ href: "/admin", label: "Admin Panel" });
-  }
 
   // Core navigation items that are always visible
   // Order: Dashboard, Agents, Chatbot (module), Rag (module), Settings

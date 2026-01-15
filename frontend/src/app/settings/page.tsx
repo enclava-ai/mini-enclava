@@ -27,8 +27,10 @@ import {
   Info,
   Square,
   Clock,
-  Play
+  Play,
+  Puzzle
 } from "lucide-react";
+import { PluginManager } from '@/components/plugins/PluginManager';
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/lib/api-client";
 import { useModules, triggerModuleRefresh } from '@/contexts/ModulesContext';
@@ -355,10 +357,11 @@ function SettingsPageContent() {
       )}
 
       <Tabs defaultValue="api" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="api">API</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="modules">Modules</TabsTrigger>
+          <TabsTrigger value="plugins">Plugins</TabsTrigger>
         </TabsList>
 
 <TabsContent value="api" className="space-y-6">
@@ -784,6 +787,10 @@ function SettingsPageContent() {
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        <TabsContent value="plugins" className="space-y-6">
+          <PluginManager />
         </TabsContent>
 
       </Tabs>

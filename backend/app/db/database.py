@@ -262,11 +262,22 @@ async def init_db():
 async def create_default_roles():
     """Create default roles if they don't exist"""
     from app.models.role import Role, RoleLevel
-    from sqlalchemy import select
-    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy import select, text
+    from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 
     try:
         async with async_session_factory() as session:
+            # Check if the roles table exists first
+            check_table = text(
+                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'roles')"
+            )
+            result = await session.execute(check_table)
+            table_exists = result.scalar()
+
+            if not table_exists:
+                logger.warning("Roles table does not exist yet - waiting for migrations")
+                return
+
             # Check if any roles exist
             stmt = select(Role).limit(1)
             result = await session.execute(stmt)
@@ -286,6 +297,12 @@ async def create_default_roles():
 
             logger.info("Created default roles: read_only, user, admin, super_admin")
 
+    except ProgrammingError as e:
+        if "does not exist" in str(e):
+            logger.warning("Roles table does not exist yet - waiting for migrations")
+        else:
+            logger.error(f"Failed to create default roles due to database error: {e}")
+            raise
     except SQLAlchemyError as e:
         logger.error(f"Failed to create default roles due to database error: {e}")
         raise
@@ -297,8 +314,8 @@ async def create_default_admin():
     from app.models.role import Role
     from app.core.security import get_password_hash
     from app.core.config import settings
-    from sqlalchemy import select
-    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy import select, text
+    from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 
     try:
         admin_email = settings.ADMIN_EMAIL
@@ -309,6 +326,18 @@ async def create_default_admin():
             return
 
         async with async_session_factory() as session:
+            # Check if required tables exist first
+            check_tables = text(
+                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users') "
+                "AND EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'roles')"
+            )
+            result = await session.execute(check_tables)
+            tables_exist = result.scalar()
+
+            if not tables_exist:
+                logger.warning("Users/roles tables do not exist yet - waiting for migrations")
+                return
+
             # Check if user with ADMIN_EMAIL exists
             stmt = select(User).where(User.email == admin_email)
             result = await session.execute(stmt)
@@ -356,6 +385,11 @@ async def create_default_admin():
             logger.warning("PLEASE CHANGE THE PASSWORD AFTER FIRST LOGIN")
             logger.warning("=" * 60)
 
+    except ProgrammingError as e:
+        if "does not exist" in str(e):
+            logger.warning("Users/roles tables do not exist yet - waiting for migrations")
+        else:
+            logger.error(f"Failed to create default admin user due to database error: {e}")
     except SQLAlchemyError as e:
         logger.error(f"Failed to create default admin user due to database error: {e}")
     except AttributeError as e:
