@@ -74,22 +74,34 @@ async def _check_redis_startup():
 
 
 async def _check_database_startup():
-    """Validate database connectivity during startup."""
+    """Validate database connectivity during startup with retries."""
     start = time.perf_counter()
-    try:
-        async with async_session_factory() as session:
-            await asyncio.wait_for(session.execute(select(1)), timeout=3.0)
-        duration = time.perf_counter() - start
-        logger.info(
-            "Startup database check succeeded",
-            extra={"duration_seconds": round(duration, 3)},
-        )
-    except (asyncio.TimeoutError, SQLAlchemyError) as exc:
-        logger.error(
-            "Startup database check failed",
-            extra={"error": str(exc)},
-        )
-        raise
+    max_retries = 5
+    retry_delay = 2.0  # seconds
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with async_session_factory() as session:
+                await asyncio.wait_for(session.execute(select(1)), timeout=3.0)
+            duration = time.perf_counter() - start
+            logger.info(
+                "Startup database check succeeded",
+                extra={"duration_seconds": round(duration, 3), "attempt": attempt},
+            )
+            return
+        except (asyncio.TimeoutError, SQLAlchemyError, ConnectionRefusedError) as exc:
+            if attempt < max_retries:
+                logger.warning(
+                    f"Startup database check failed (attempt {attempt}/{max_retries}), retrying in {retry_delay}s...",
+                    extra={"error": str(exc), "attempt": attempt},
+                )
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error(
+                    "Startup database check failed after all retries",
+                    extra={"error": str(exc), "attempts": max_retries},
+                )
+                raise
 
 
 async def run_startup_dependency_checks():

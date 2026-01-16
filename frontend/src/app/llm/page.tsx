@@ -30,6 +30,7 @@ import ChatPlayground from '@/components/playground/ChatPlayground'
 import EmbeddingPlayground from '@/components/playground/EmbeddingPlayground'
 import ModelSelector from '@/components/playground/ModelSelector'
 import UsageTab from '@/components/llm/UsageTab'
+import ProvidersTab from '@/components/llm/ProvidersTab'
 
 interface PromptTemplate {
   id: string
@@ -66,6 +67,7 @@ function LLMPageContent() {
   const [activeTab, setActiveTab] = useState(() => {
     if (tabParam === 'prompt-templates') return 'prompt-templates'
     if (tabParam === 'playground') return 'playground'
+    if (tabParam === 'providers') return 'providers'
     return 'usage' // Default to usage tab
   })
   const [selectedModel, setSelectedModel] = useState('')
@@ -293,12 +295,13 @@ function LLMPageContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="usage" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             Usage
           </TabsTrigger>
           <TabsTrigger value="playground">Playground</TabsTrigger>
+          <TabsTrigger value="providers">Providers</TabsTrigger>
           <TabsTrigger value="prompt-templates">Prompt Templates</TabsTrigger>
         </TabsList>
 
@@ -343,6 +346,10 @@ function LLMPageContent() {
               </Tabs>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="providers" className="mt-6">
+          <ProvidersTab />
         </TabsContent>
 
         <TabsContent value="prompt-templates" className="mt-6">

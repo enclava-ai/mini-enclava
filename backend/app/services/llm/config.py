@@ -145,6 +145,34 @@ def create_default_config(env_vars=None) -> LLMServiceConfig:
 
     providers: Dict[str, ProviderConfig] = {"privatemode": privatemode_config}
 
+    # RedPill.ai configuration (confidential models only)
+    if env.REDPILL_API_KEY:
+        redpill_config = ProviderConfig(
+            name="redpill",
+            provider_type="redpill",
+            enabled=True,
+            base_url=getattr(settings, "REDPILL_BASE_URL", "https://api.redpill.ai/v1"),
+            api_key_env_var="REDPILL_API_KEY",
+            default_model="phala/deepseek-chat-v3-0324",
+            supported_models=[],  # Will be populated dynamically from API (confidential models only)
+            capabilities=["chat", "embeddings", "tee", "attestation"],
+            priority=2,
+            max_requests_per_minute=60,  # RedPill default limit
+            max_requests_per_hour=3600,
+            supports_streaming=True,
+            supports_function_calling=True,
+            max_context_window=128000,
+            max_output_tokens=8192,
+            resilience=ResilienceConfig(
+                max_retries=3,
+                retry_delay_ms=1000,
+                timeout_ms=60000,  # TEE may be slower
+                circuit_breaker_threshold=5,
+                circuit_breaker_reset_timeout_ms=120000,
+            ),
+        )
+        providers["redpill"] = redpill_config
+
     if env.OPENAI_API_KEY:
         providers["openai"] = ProviderConfig(
             name="openai",
@@ -252,6 +280,7 @@ class EnvironmentVariables:
 
     # Provider API keys
     PRIVATEMODE_API_KEY: Optional[str] = None
+    REDPILL_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
@@ -262,6 +291,7 @@ class EnvironmentVariables:
     def __post_init__(self):
         """Load values from environment"""
         self.PRIVATEMODE_API_KEY = os.getenv("PRIVATEMODE_API_KEY")
+        self.REDPILL_API_KEY = os.getenv("REDPILL_API_KEY")
         self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
         self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -271,6 +301,7 @@ class EnvironmentVariables:
         """Get API key for a specific provider"""
         key_mapping = {
             "privatemode": self.PRIVATEMODE_API_KEY,
+            "redpill": self.REDPILL_API_KEY,
             "openai": self.OPENAI_API_KEY,
             "anthropic": self.ANTHROPIC_API_KEY,
             "google": self.GOOGLE_API_KEY,

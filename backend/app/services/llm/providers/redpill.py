@@ -1,14 +1,15 @@
 """
-PrivateMode.ai LLM Provider
+RedPill.ai LLM Provider
 
-Integration with PrivateMode.ai TEE-protected LLM service via proxy.
+Integration with RedPill.ai confidential inference service.
+Only exposes confidential models (phala/*, tinfoil/*, nearai/*).
 """
 
 import json
 import logging
 import time
 import uuid
-from typing import List, Dict, Any, Optional, AsyncGenerator
+from typing import List, Dict, Any, Optional, AsyncGenerator, Set
 from datetime import datetime
 
 import aiohttp
@@ -31,9 +32,12 @@ from ..exceptions import ProviderError, ValidationError, TimeoutError
 
 logger = logging.getLogger(__name__)
 
+# Only expose confidential models (full TEE)
+CONFIDENTIAL_MODEL_PREFIXES = ("phala/", "tinfoil/", "nearai/")
 
-class PrivateModeProvider(BaseLLMProvider):
-    """PrivateMode.ai provider with TEE security"""
+
+class RedPillProvider(BaseLLMProvider):
+    """RedPill.ai provider with confidential computing support"""
 
     def __init__(self, config: ProviderConfig, api_key: str):
         super().__init__(config, api_key)
@@ -44,15 +48,31 @@ class PrivateModeProvider(BaseLLMProvider):
         self.verify_ssl = True  # Always verify SSL for security
         self.trust_env = False  # Don't trust environment proxy settings
 
-        logger.info(f"PrivateMode provider initialized with base URL: {self.base_url}")
+        logger.info(f"RedPill provider initialized with base URL: {self.base_url}")
 
     @property
     def provider_name(self) -> str:
-        return "privatemode"
+        return "redpill"
 
     @property
     def display_name(self) -> str:
-        return "PrivateMode.ai"
+        return "RedPill.ai (Confidential)"
+
+    def is_available(self) -> bool:
+        """Provider is available only if attestation is healthy."""
+        # Import here to avoid circular dependency
+        from ..attestation.scheduler import attestation_scheduler
+        return attestation_scheduler.is_healthy(self.provider_name)
+
+    def supports_model(self, model: str) -> bool:
+        """Only support confidential models when healthy."""
+        if not model.lower().startswith(CONFIDENTIAL_MODEL_PREFIXES):
+            return False
+        return self.is_available()
+
+    def _is_confidential_model(self, model: str) -> bool:
+        """Check if model is a confidential (full TEE) model."""
+        return model.lower().startswith(CONFIDENTIAL_MODEL_PREFIXES)
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session with security settings"""
@@ -78,12 +98,12 @@ class PrivateModeProvider(BaseLLMProvider):
                 trust_env=False,  # Don't trust environment variables
             )
 
-            logger.debug("Created new secure HTTP session for PrivateMode")
+            logger.debug("Created new secure HTTP session for RedPill")
 
         return self._session
 
     async def health_check(self) -> ProviderStatus:
-        """Check PrivateMode.ai service health"""
+        """Check RedPill.ai service health"""
         start_time = time.time()
 
         try:
@@ -95,8 +115,12 @@ class PrivateModeProvider(BaseLLMProvider):
 
                 if response.status == 200:
                     models_data = await response.json()
-                    models = [
+                    # Filter to only confidential models
+                    all_models = [
                         model.get("id", "") for model in models_data.get("data", [])
+                    ]
+                    confidential_models = [
+                        m for m in all_models if self._is_confidential_model(m)
                     ]
 
                     return ProviderStatus(
@@ -105,7 +129,7 @@ class PrivateModeProvider(BaseLLMProvider):
                         latency_ms=latency,
                         success_rate=1.0,
                         last_check=datetime.utcnow(),
-                        models_available=models,
+                        models_available=confidential_models,
                     )
                 else:
                     error_text = await response.text()
@@ -121,7 +145,7 @@ class PrivateModeProvider(BaseLLMProvider):
 
         except Exception as e:
             latency = (time.time() - start_time) * 1000
-            logger.error(f"PrivateMode health check failed: {e}")
+            logger.error(f"RedPill health check failed: {e}")
 
             return ProviderStatus(
                 provider=self.provider_name,
@@ -134,7 +158,7 @@ class PrivateModeProvider(BaseLLMProvider):
             )
 
     async def get_models(self) -> List[ModelInfo]:
-        """Get available models from PrivateMode.ai"""
+        """Get only confidential models from RedPill.ai"""
         try:
             session = await self._get_session()
 
@@ -149,13 +173,18 @@ class PrivateModeProvider(BaseLLMProvider):
                         if not model_id:
                             continue
 
+                        # Only include confidential models
+                        if not self._is_confidential_model(model_id):
+                            continue
+
                         # Extract all information directly from API response
                         # Determine capabilities based on tasks field
                         tasks = model_data.get("tasks", [])
                         capabilities = []
 
-                        # All PrivateMode models have TEE capability
+                        # All RedPill confidential models have TEE capability
                         capabilities.append("tee")
+                        capabilities.append("attestation")
 
                         # Add capabilities based on tasks
                         if "generate" in tasks:
@@ -176,7 +205,7 @@ class PrivateModeProvider(BaseLLMProvider):
                             id=model_id,
                             object="model",
                             created=model_data.get("created", int(time.time())),
-                            owned_by=model_data.get("owned_by", "privatemode"),
+                            owned_by=model_data.get("owned_by", "redpill"),
                             provider=self.provider_name,
                             capabilities=capabilities,
                             context_window=model_data.get("context_window"),
@@ -185,11 +214,11 @@ class PrivateModeProvider(BaseLLMProvider):
                                 "supports_streaming", True
                             ),
                             supports_function_calling=supports_function_calling,
-                            tasks=tasks,  # Pass through tasks field from PrivateMode API
+                            tasks=tasks,  # Pass through tasks field from RedPill API
                         )
                         models.append(model_info)
 
-                    logger.info(f"Retrieved {len(models)} models from PrivateMode")
+                    logger.info(f"Retrieved {len(models)} confidential models from RedPill")
                     return models
                 else:
                     error_text = await response.text()
@@ -202,17 +231,36 @@ class PrivateModeProvider(BaseLLMProvider):
             if isinstance(e, ProviderError):
                 raise
 
-            logger.error(f"Failed to get models from PrivateMode: {e}")
+            logger.error(f"Failed to get models from RedPill: {e}")
             raise ProviderError(
-                "Failed to retrieve models from PrivateMode",
+                "Failed to retrieve models from RedPill",
                 provider=self.provider_name,
                 error_code="MODEL_RETRIEVAL_ERROR",
                 details={"error": str(e)},
             )
 
     async def create_chat_completion(self, request: ChatRequest) -> ChatResponse:
-        """Create chat completion via PrivateMode.ai"""
+        """Create chat completion via RedPill.ai (only for confidential models)"""
         self._validate_request(request)
+
+        # Additional validation for confidential models
+        if not self._is_confidential_model(request.model):
+            raise ValidationError(
+                f"Model {request.model} is not a confidential model",
+                field="model",
+            )
+
+        # Check if provider is healthy
+        if not self.is_available():
+            # Import here to avoid circular dependency
+            from ..attestation.scheduler import attestation_scheduler
+            health = attestation_scheduler.get_health(self.provider_name)
+            error_msg = health.error if health else "unknown"
+            raise ProviderError(
+                f"Provider unhealthy: {error_msg}",
+                provider=self.provider_name,
+                error_code="PROVIDER_UNHEALTHY",
+            )
 
         start_time = time.time()
 
@@ -332,7 +380,7 @@ class PrivateModeProvider(BaseLLMProvider):
                     )
 
                     logger.debug(
-                        f"PrivateMode chat completion successful in {provider_latency:.2f}ms"
+                        f"RedPill chat completion successful in {provider_latency:.2f}ms"
                     )
                     return chat_response
 
@@ -343,9 +391,9 @@ class PrivateModeProvider(BaseLLMProvider):
                     )
 
         except aiohttp.ClientError as e:
-            logger.error(f"PrivateMode request error: {e}")
+            logger.error(f"RedPill request error: {e}")
             raise ProviderError(
-                "Network error communicating with PrivateMode",
+                "Network error communicating with RedPill",
                 provider=self.provider_name,
                 error_code="NETWORK_ERROR",
                 details={"error": str(e)},
@@ -354,7 +402,7 @@ class PrivateModeProvider(BaseLLMProvider):
             if isinstance(e, (ProviderError, ValidationError)):
                 raise
 
-            logger.error(f"Unexpected error in PrivateMode chat completion: {e}")
+            logger.error(f"Unexpected error in RedPill chat completion: {e}")
             raise ProviderError(
                 "Unexpected error during chat completion",
                 provider=self.provider_name,
@@ -367,6 +415,25 @@ class PrivateModeProvider(BaseLLMProvider):
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Create streaming chat completion"""
         self._validate_request(request)
+
+        # Additional validation for confidential models
+        if not self._is_confidential_model(request.model):
+            raise ValidationError(
+                f"Model {request.model} is not a confidential model",
+                field="model",
+            )
+
+        # Check if provider is healthy
+        if not self.is_available():
+            # Import here to avoid circular dependency
+            from ..attestation.scheduler import attestation_scheduler
+            health = attestation_scheduler.get_health(self.provider_name)
+            error_msg = health.error if health else "unknown"
+            raise ProviderError(
+                f"Provider unhealthy: {error_msg}",
+                provider=self.provider_name,
+                error_code="PROVIDER_UNHEALTHY",
+            )
 
         try:
             session = await self._get_session()
@@ -440,7 +507,7 @@ class PrivateModeProvider(BaseLLMProvider):
                     )
 
         except aiohttp.ClientError as e:
-            logger.error(f"PrivateMode streaming error: {e}")
+            logger.error(f"RedPill streaming error: {e}")
             raise ProviderError(
                 "Network error during streaming",
                 provider=self.provider_name,
@@ -449,8 +516,27 @@ class PrivateModeProvider(BaseLLMProvider):
             )
 
     async def create_embedding(self, request: EmbeddingRequest) -> EmbeddingResponse:
-        """Create embeddings via PrivateMode.ai"""
+        """Create embeddings via RedPill.ai"""
         self._validate_request(request)
+
+        # Check if model is confidential
+        if not self._is_confidential_model(request.model):
+            raise ValidationError(
+                f"Model {request.model} is not a confidential model",
+                field="model",
+            )
+
+        # Check if provider is healthy
+        if not self.is_available():
+            # Import here to avoid circular dependency
+            from ..attestation.scheduler import attestation_scheduler
+            health = attestation_scheduler.get_health(self.provider_name)
+            error_msg = health.error if health else "unknown"
+            raise ProviderError(
+                f"Provider unhealthy: {error_msg}",
+                provider=self.provider_name,
+                error_code="PROVIDER_UNHEALTHY",
+            )
 
         start_time = time.time()
 
@@ -522,12 +608,12 @@ class PrivateModeProvider(BaseLLMProvider):
                     error_text = await response.text()
                     # Log the detailed error response from the provider
                     logger.error(
-                        f"PrivateMode embedding error - Status {response.status}: {error_text}"
+                        f"RedPill embedding error - Status {response.status}: {error_text}"
                     )
                     self._handle_http_error(response.status, error_text, "embeddings")
 
         except aiohttp.ClientError as e:
-            logger.error(f"PrivateMode embedding error: {e}")
+            logger.error(f"RedPill embedding error: {e}")
             raise ProviderError(
                 "Network error during embedding generation",
                 provider=self.provider_name,
@@ -538,7 +624,7 @@ class PrivateModeProvider(BaseLLMProvider):
             if isinstance(e, (ProviderError, ValidationError)):
                 raise
 
-            logger.error(f"Unexpected error in PrivateMode embedding: {e}")
+            logger.error(f"Unexpected error in RedPill embedding: {e}")
             raise ProviderError(
                 "Unexpected error during embedding generation",
                 provider=self.provider_name,
@@ -547,12 +633,12 @@ class PrivateModeProvider(BaseLLMProvider):
             )
 
     async def cleanup(self):
-        """Cleanup PrivateMode provider resources"""
+        """Cleanup RedPill provider resources"""
         # Close HTTP session to prevent memory leaks
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
-            logger.debug("Closed PrivateMode HTTP session")
+            logger.debug("Closed RedPill HTTP session")
 
         await super().cleanup()
-        logger.debug("PrivateMode provider cleanup completed")
+        logger.debug("RedPill provider cleanup completed")

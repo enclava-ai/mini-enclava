@@ -25,6 +25,7 @@ from .admin_pricing import router as admin_pricing_router
 from .admin_audit import router as admin_audit_router
 from .usage_stats import router as usage_stats_router
 from .metrics import router as metrics_router
+from .providers import router as providers_router
 
 # Create internal API router
 internal_api_router = APIRouter()
@@ -136,4 +137,9 @@ internal_api_router.include_router(
 # Include metrics endpoint (Prometheus metrics)
 internal_api_router.include_router(
     metrics_router, tags=["internal-metrics"]
+)
+
+# Include provider health routes (provider monitoring - admin only)
+internal_api_router.include_router(
+    providers_router, prefix="/providers", tags=["internal-providers"]
 )

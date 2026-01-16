@@ -73,15 +73,15 @@ const Navigation = () => {
   // Build settings children based on permissions
   const settingsChildren = [
     { href: "/settings", label: "System Settings" },
-    { href: "/llm", label: "LLM" },
     { href: "/admin/users", label: "Users" },
   ];
 
   // Core navigation items that are always visible
-  // Order: Dashboard, Agents, Chatbot (module), Rag (module), Settings
+  // Order: Dashboard, Agents, LLM, Chatbot (module), Rag (module), Settings
   const coreNavItems = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/agents", label: "Agents" },
+    { href: "/llm", label: "LLM" },
   ]
 
   // Settings goes at the end
@@ -96,7 +96,7 @@ const Navigation = () => {
     .filter(([moduleName]) => isModuleEnabled(moduleName))
     .map(([, navItem]) => navItem)
 
-  // Combine: Dashboard, Agents, module items (Chatbot, RAG), plugins, then Settings at the end
+  // Combine: Dashboard, Agents, LLM, module items (Chatbot, RAG), plugins, then Settings at the end
   const navItems = [...coreNavItems, ...moduleNavItems, ...pluginNavItems, settingsItem]
 
   return (

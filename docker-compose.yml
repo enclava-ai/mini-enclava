@@ -47,6 +47,9 @@ services:
       - QDRANT_HOST=enclava-qdrant
       - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
       - PRIVATEMODE_API_KEY=${PRIVATEMODE_API_KEY:-}
+      - REDPILL_API_KEY=${REDPILL_API_KEY:-}
+      - REDPILL_BASE_URL=${REDPILL_BASE_URL:-https://api.redpill.ai/v1}
+      - REDPILL_TEST_MODEL=${REDPILL_TEST_MODEL:-phala/deepseek-v3.2}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - LOG_LLM_PROMPTS=${LOG_LLM_PROMPTS:-false}

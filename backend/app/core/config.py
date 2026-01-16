@@ -94,6 +94,16 @@ class Settings(BaseSettings):
         "PRIVATEMODE_PROXY_URL", "http://privatemode-proxy:8080/v1"
     )
 
+    # RedPill.ai (confidential computing provider)
+    REDPILL_API_KEY: Optional[str] = os.getenv("REDPILL_API_KEY")
+    REDPILL_BASE_URL: str = os.getenv("REDPILL_BASE_URL", "https://api.redpill.ai/v1")
+    REDPILL_TEST_MODEL: str = os.getenv("REDPILL_TEST_MODEL", "phala/deepseek-v3.2")
+
+    # Attestation scheduler configuration
+    ATTESTATION_VERIFICATION_INTERVAL_SECONDS: int = int(
+        os.getenv("ATTESTATION_VERIFICATION_INTERVAL_SECONDS", "300")
+    )  # 5 minutes
+
     # Qdrant
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
