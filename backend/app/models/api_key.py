@@ -31,15 +31,7 @@ class APIKey(Base):
 
     # User relationship
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    user = relationship("User", back_populates="api_keys")
-
-    # Related data relationships
-    budgets = relationship(
-        "Budget", back_populates="api_key", cascade="all, delete-orphan"
-    )
-    usage_tracking = relationship(
-        "UsageTracking", back_populates="api_key", cascade="all, delete-orphan"
-    )
+    user = relationship("User", back_populates="api_keys", foreign_keys=[user_id])
 
     # Key status and permissions
     is_active = Column(Boolean, default=True)
@@ -77,6 +69,11 @@ class APIKey(Base):
     last_used_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=True)  # Optional expiration
 
+    # Soft delete columns (added in migration 017)
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    deletion_reason = Column(Text, nullable=True)
+
     # Usage tracking
     total_requests = Column(Integer, default=0)
     total_tokens = Column(Integer, default=0)
@@ -90,9 +87,22 @@ class APIKey(Base):
         "Budget", back_populates="api_key", cascade="all, delete-orphan"
     )
     plugin_audit_logs = relationship("PluginAuditLog", back_populates="api_key")
+    usage_records = relationship(
+        "UsageRecord", back_populates="api_key", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<APIKey(id={self.id}, name='{self.name}', user_id={self.user_id})>"
+
+    @property
+    def is_deleted(self) -> bool:
+        """Check if the API key has been soft deleted"""
+        return self.deleted_at is not None
+
+    @property
+    def is_active_and_not_deleted(self) -> bool:
+        """Check if the API key is active and not deleted (for filtering)"""
+        return self.is_active and not self.is_deleted
 
     def to_dict(self, include_sensitive: bool = False):
         """Convert API key to dictionary for API responses"""
@@ -126,6 +136,11 @@ class APIKey(Base):
             "is_unlimited": self.is_unlimited,
             "budget_limit": self.budget_limit_cents,  # Map to budget_limit for API response
             "budget_type": self.budget_type,
+            # Soft delete fields
+            "is_deleted": self.is_deleted,
+            "deleted_at": self.deleted_at.isoformat() if self.deleted_at else None,
+            "deleted_by_user_id": self.deleted_by_user_id,
+            "deletion_reason": self.deletion_reason,
         }
 
         if include_sensitive:
@@ -140,8 +155,8 @@ class APIKey(Base):
         return datetime.utcnow() > self.expires_at
 
     def is_valid(self) -> bool:
-        """Check if the API key is valid and active"""
-        return self.is_active and not self.is_expired()
+        """Check if the API key is valid, active, and not deleted"""
+        return self.is_active and not self.is_expired() and not self.is_deleted
 
     def has_permission(self, permission: str) -> bool:
         """Check if the API key has a specific permission"""
@@ -203,6 +218,33 @@ class APIKey(Base):
     def revoke(self):
         """Revoke the API key"""
         self.is_active = False
+        self.updated_at = datetime.utcnow()
+
+    def soft_delete(self, deleted_by_user_id: int, reason: str = None):
+        """
+        Soft delete the API key.
+        - Sets deleted_at to current timestamp
+        - Sets deleted_by_user_id
+        - Sets is_active to False
+        - Stores deletion_reason
+        """
+        self.deleted_at = datetime.utcnow()
+        self.deleted_by_user_id = deleted_by_user_id
+        self.deletion_reason = reason
+        self.is_active = False
+        self.updated_at = datetime.utcnow()
+
+    def restore(self):
+        """
+        Restore a soft-deleted API key.
+        - Clears deleted_at
+        - Clears deleted_by_user_id
+        - Clears deletion_reason
+        - Does NOT automatically set is_active to True (admin decision)
+        """
+        self.deleted_at = None
+        self.deleted_by_user_id = None
+        self.deletion_reason = None
         self.updated_at = datetime.utcnow()
 
     def add_scope(self, scope: str):

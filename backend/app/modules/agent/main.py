@@ -8,6 +8,7 @@ import time
 import uuid
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Union
+from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -25,6 +26,7 @@ from app.core.security import get_current_user
 from app.db.database import get_db
 from app.services.api_key_auth import get_api_key_context, get_api_key_auth
 from app.models.api_key import APIKey
+from app.services.usage_recording import UsageRecordingService
 
 # Import protocols for type hints and dependency injection
 from ..protocols import RAGServiceProtocol
@@ -622,7 +624,7 @@ class AgentModule(BaseModule):
             temperature=agent.temperature,  # Already 0.0-2.0 range
             max_tokens=agent.max_tokens,
             user_id=str(user_id),
-            api_key_id=1
+            api_key_id=None  # None = Internal/Playground usage (JWT auth)
         )
 
         # Execute via ToolCallingService
@@ -712,6 +714,10 @@ class AgentModule(BaseModule):
         db: AsyncSession
     ) -> AgentChatCompletionResponse:
         """OpenAI-compatible chat completion for agents with API key auth."""
+        start_time = time.time()
+        request_id = uuid4()
+        usage_service = UsageRecordingService(db)
+
         # Check if API key can access this agent
         if not api_key.can_access_agent(agent_id):
             raise HTTPException(
@@ -876,9 +882,31 @@ class AgentModule(BaseModule):
         agent.usage_count += 1
         agent.last_used_at = datetime.utcnow()
 
-        # Update API key usage
+        # Get token counts
         prompt_tokens = response.usage.prompt_tokens if response.usage else 0
         completion_tokens = response.usage.completion_tokens if response.usage else 0
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        # Record usage to usage_records table
+        await usage_service.record_request(
+            request_id=request_id,
+            user_id=api_key.user_id,
+            api_key_id=api_key.id,
+            provider_id="privatemode",
+            provider_model=agent.model,
+            input_tokens=prompt_tokens,
+            output_tokens=completion_tokens,
+            endpoint=f"/api/v1/agent/{agent_id}/v1/chat/completions",
+            method="POST",
+            agent_config_id=agent_id,
+            is_streaming=False,
+            is_tool_calling=bool(assistant_msg.tool_calls),
+            message_count=len(request.messages),
+            latency_ms=latency_ms,
+            status="success",
+        )
+
+        # Update API key usage
         api_key.update_usage(tokens_used=prompt_tokens + completion_tokens, cost_cents=0)
         await db.commit()
 
@@ -1007,6 +1035,9 @@ class AgentModule(BaseModule):
             api_key_context: Optional[Dict[str, Any]] = Depends(get_api_key_context),
         ):
             """Internal chat completions endpoint for agents (JWT auth)."""
+            start_time = time.time()
+            request_id = uuid4()
+            usage_service = UsageRecordingService(db)
             user_id = _get_user_id(current_user)
 
             # Find the last user message
@@ -1129,7 +1160,7 @@ class AgentModule(BaseModule):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 user_id=str(user_id),
-                api_key_id=1
+                api_key_id=None  # None = Internal/Playground usage (JWT auth)
             )
 
             # Execute via ToolCallingService
@@ -1167,10 +1198,38 @@ class AgentModule(BaseModule):
             # Update agent usage
             agent.usage_count += 1
             agent.last_used_at = datetime.utcnow()
-            await db.commit()
 
+            # Get token counts
             prompt_tokens = response.usage.prompt_tokens if response.usage else 0
             completion_tokens = response.usage.completion_tokens if response.usage else 0
+            latency_ms = int((time.time() - start_time) * 1000)
+
+            # Determine api_key_id for recording
+            api_key_id = None
+            if api_key_context:
+                api_key = api_key_context.get("api_key")
+                if api_key:
+                    api_key_id = api_key.id
+
+            # Record usage to usage_records table
+            await usage_service.record_request(
+                request_id=request_id,
+                user_id=user_id,
+                api_key_id=api_key_id,  # None for JWT-only auth
+                provider_id="privatemode",
+                provider_model=agent.model,
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+                endpoint=f"/api-internal/v1/agent/{agent_id}/chat/completions",
+                method="POST",
+                agent_config_id=agent_id,
+                is_streaming=False,
+                is_tool_calling=bool(assistant_msg.tool_calls) if assistant_msg.tool_calls else False,
+                message_count=len(request.messages),
+                latency_ms=latency_ms,
+                status="success",
+            )
+            await db.commit()
 
             return AgentChatCompletionResponse(
                 id=f"agent-{agent.id}-{int(time.time())}",

@@ -21,6 +21,10 @@ from ..v1.chatbot import router as chatbot_router
 from .debugging import router as debugging_router
 from ..v1.endpoints.user_management import router as user_management_router
 from ..v1.endpoints.tool_calling import router as tool_calling_router
+from .admin_pricing import router as admin_pricing_router
+from .admin_audit import router as admin_audit_router
+from .usage_stats import router as usage_stats_router
+from .metrics import router as metrics_router
 
 # Create internal API router
 internal_api_router = APIRouter()
@@ -112,4 +116,24 @@ internal_api_router.include_router(
 # Include tool-calling routes (agent configurations and tool execution)
 internal_api_router.include_router(
     tool_calling_router, prefix="/tool-calling", tags=["internal-tool-calling"]
+)
+
+# Include admin pricing routes (pricing management - admin only)
+internal_api_router.include_router(
+    admin_pricing_router, prefix="/admin", tags=["internal-admin-pricing"]
+)
+
+# Include admin billing audit routes (billing audit log - admin only)
+internal_api_router.include_router(
+    admin_audit_router, prefix="/admin", tags=["internal-admin-audit"]
+)
+
+# Include usage statistics routes (usage stats and records)
+internal_api_router.include_router(
+    usage_stats_router, tags=["internal-usage-stats"]
+)
+
+# Include metrics endpoint (Prometheus metrics)
+internal_api_router.include_router(
+    metrics_router, tags=["internal-metrics"]
 )

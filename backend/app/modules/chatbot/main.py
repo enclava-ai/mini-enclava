@@ -519,7 +519,7 @@ class ChatbotModule(BaseModule):
                         temperature=chatbot_config.temperature,
                         max_tokens=chatbot_config.max_tokens,
                         user_id=user_id,
-                        api_key_id=0  # Chatbot doesn't use API keys
+                        api_key_id=None  # None = Chatbot internal usage (no API key)
                     )
 
                     # Use ToolCallingService for execution
@@ -926,7 +926,7 @@ class ChatbotModule(BaseModule):
                 temperature=config.temperature,
                 max_tokens=config.max_tokens,
                 user_id="chatbot_user",
-                api_key_id=0,  # Chatbot module uses internal service
+                api_key_id=None,  # None = Chatbot internal usage (no API key)
             )
 
             # Make request to LLM service

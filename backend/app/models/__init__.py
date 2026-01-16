@@ -36,6 +36,14 @@ from .notification import (
 )
 from .agent_config import AgentConfig
 from .mcp_server import MCPServer
+from .usage_record import UsageRecord
+from .provider_pricing import ProviderPricing, PricingAuditLog
+from .billing_audit_log import (
+    BillingAuditLog,
+    EntityType as BillingEntityType,
+    ActionType as BillingActionType,
+    ActorType as BillingActorType,
+)
 
 __all__ = [
     "User",
@@ -72,4 +80,11 @@ __all__ = [
     "NotificationStatus",
     "AgentConfig",
     "MCPServer",
+    "UsageRecord",
+    "ProviderPricing",
+    "PricingAuditLog",
+    "BillingAuditLog",
+    "BillingEntityType",
+    "BillingActionType",
+    "BillingActorType",
 ]

@@ -7,16 +7,21 @@ Server-sent events for real-time response generation with tool execution support
 import json
 import logging
 import time
-from typing import AsyncGenerator, Dict, Any, Optional, Union, TYPE_CHECKING
+from typing import AsyncGenerator, Dict, Any, Optional, Union, Callable, Awaitable, TYPE_CHECKING
 
 from app.services.llm.models import ChatMessage, ChatRequest, ToolCall
 from app.services.llm.service import llm_service
+from app.services.llm.streaming_tracker import StreamingTokenTracker, StreamingUsage
 
 if TYPE_CHECKING:
     from app.services.tool_calling_service import ToolCallingService
     from app.models.user import User
 
 logger = logging.getLogger(__name__)
+
+
+# Callback type for usage recording
+UsageRecordingCallback = Callable[[StreamingUsage, str, bool], Awaitable[None]]
 
 
 class ResponseStreamEventType:
@@ -43,6 +48,115 @@ class ResponseStreamEvent:
             SSE formatted string
         """
         return f"event: {self.event_type}\ndata: {json.dumps(self.data)}\n\n"
+
+
+async def stream_response_events_with_tracking(
+    response_id: str,
+    model: str,
+    chat_request: ChatRequest,
+    tool_calling_service: "ToolCallingService",
+    user: Union["User", Dict[str, Any]],
+    tool_resources: Optional[Dict[str, Any]] = None,
+    max_tool_calls: int = 5,
+    estimated_input_tokens: int = 0,
+    on_complete: Optional[UsageRecordingCallback] = None,
+) -> AsyncGenerator[str, None]:
+    """Stream response events with token tracking and usage recording callback.
+
+    Wraps stream_response_events_with_tools with StreamingTokenTracker to
+    accumulate token usage and call the recording callback when streaming completes.
+
+    Args:
+        response_id: Response ID for event correlation
+        model: Model name
+        chat_request: Chat request to send to LLM
+        tool_calling_service: Tool calling service for tool resolution and execution
+        user: User making the request
+        tool_resources: Tool resources (e.g., file_search.vector_store_ids for RAG)
+        max_tool_calls: Maximum number of tool call iterations
+        estimated_input_tokens: Estimated input tokens for accurate tracking
+        on_complete: Async callback to record usage when streaming completes
+
+    Yields:
+        SSE formatted event strings
+    """
+    # Initialize token tracker
+    tracker = StreamingTokenTracker(model=model, estimated_input_tokens=estimated_input_tokens)
+    stream_status = "success"
+    error_occurred = False
+
+    try:
+        # Stream events and track tokens
+        async for event in stream_response_events_with_tools(
+            response_id=response_id,
+            model=model,
+            chat_request=chat_request,
+            tool_calling_service=tool_calling_service,
+            user=user,
+            tool_resources=tool_resources,
+            max_tool_calls=max_tool_calls,
+        ):
+            # Try to extract token data from event for tracking
+            try:
+                # Parse the SSE event to extract data
+                if event.startswith("event:"):
+                    lines = event.strip().split("\n")
+                    if len(lines) >= 2 and lines[1].startswith("data:"):
+                        data_str = lines[1][5:].strip()  # Remove "data:" prefix
+                        data = json.loads(data_str)
+
+                        # Track chunks from output_text.delta events
+                        if "delta" in data and isinstance(data.get("delta"), str):
+                            # Create a fake chunk for tracker
+                            fake_chunk = {
+                                "choices": [{
+                                    "delta": {"content": data["delta"]}
+                                }]
+                            }
+                            tracker.process_chunk(fake_chunk)
+
+                        # Check for completion or failure events
+                        event_type = lines[0].replace("event:", "").strip()
+                        if event_type == ResponseStreamEventType.COMPLETED:
+                            pass  # Normal completion
+                        elif event_type == ResponseStreamEventType.FAILED:
+                            stream_status = "error"
+                            error_occurred = True
+            except Exception as parse_error:
+                # Don't fail streaming if parsing fails
+                logger.debug(f"Failed to parse streaming event for tracking: {parse_error}")
+
+            yield event
+
+    except Exception as e:
+        logger.error(f"Error in tracked streaming response: {e}", exc_info=True)
+        stream_status = "error"
+        error_occurred = True
+
+        # Yield error event
+        failed_event = ResponseStreamEvent(
+            ResponseStreamEventType.FAILED,
+            {
+                "id": response_id,
+                "object": "response",
+                "status": "failed",
+                "error": {
+                    "type": "internal_error",
+                    "code": "internal_error",
+                    "message": str(e)
+                }
+            }
+        )
+        yield failed_event.to_sse()
+
+    finally:
+        # Finalize tracking and record usage
+        if on_complete:
+            try:
+                usage = tracker.finalize()
+                await on_complete(usage, stream_status, error_occurred)
+            except Exception as callback_error:
+                logger.error(f"Failed to record streaming usage: {callback_error}")
 
 
 async def stream_response_events(

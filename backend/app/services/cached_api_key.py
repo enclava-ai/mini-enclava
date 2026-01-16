@@ -62,6 +62,7 @@ class CachedAPIKeyService:
                     "api_key": api_key,
                     "user": user,
                     "api_key_id": api_key_data.get("id"),
+                    "user_id": user_data.get("id"),
                 }
 
             logger.debug(
@@ -69,12 +70,14 @@ class CachedAPIKeyService:
             )
 
             # Cache miss - fetch from database with optimized query
+            # Exclude deleted keys from authentication (soft delete support)
             stmt = (
                 select(APIKey, User)
                 .join(User, APIKey.user_id == User.id)
                 .options(joinedload(APIKey.user), joinedload(User.api_keys))
                 .where(APIKey.key_prefix == key_prefix)
                 .where(APIKey.is_active == True)
+                .where(APIKey.deleted_at.is_(None))  # Exclude soft-deleted keys
             )
 
             result = await db.execute(stmt)
@@ -89,7 +92,7 @@ class CachedAPIKeyService:
             # Cache for future requests
             await self._cache_api_key_data(key_prefix, api_key, user)
 
-            return {"api_key": api_key, "user": user, "api_key_id": api_key.id}
+            return {"api_key": api_key, "user": user, "api_key_id": api_key.id, "user_id": user.id}
 
         except Exception as e:
             logger.error(f"Error retrieving API key for prefix {key_prefix}: {e}")
@@ -137,6 +140,12 @@ class CachedAPIKeyService:
                     "budget_type": api_key.budget_type,
                     "allowed_chatbots": api_key.allowed_chatbots,
                     "allowed_agents": api_key.allowed_agents,
+                    # Soft delete fields (should always be None for cached keys)
+                    "deleted_at": api_key.deleted_at.isoformat()
+                    if api_key.deleted_at
+                    else None,
+                    "deleted_by_user_id": api_key.deleted_by_user_id,
+                    "deletion_reason": api_key.deletion_reason,
                 },
                 "user_data": {
                     "id": user.id,

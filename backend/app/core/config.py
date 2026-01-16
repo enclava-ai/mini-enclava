@@ -161,6 +161,17 @@ class Settings(BaseSettings):
     PROMETHEUS_ENABLED: bool = os.getenv("PROMETHEUS_ENABLED", "True").lower() == "true"
     PROMETHEUS_PORT: int = int(os.getenv("PROMETHEUS_PORT", "9090"))
 
+    # Alerting Configuration
+    ALERT_EMAIL_ENABLED: bool = os.getenv("ALERT_EMAIL_ENABLED", "False").lower() == "true"
+    ALERT_SMTP_HOST: Optional[str] = os.getenv("ALERT_SMTP_HOST")
+    ALERT_SMTP_PORT: int = int(os.getenv("ALERT_SMTP_PORT", "587"))
+    ALERT_SMTP_USERNAME: Optional[str] = os.getenv("ALERT_SMTP_USERNAME")
+    ALERT_SMTP_PASSWORD: Optional[str] = os.getenv("ALERT_SMTP_PASSWORD")
+    ALERT_FROM_EMAIL: str = os.getenv("ALERT_FROM_EMAIL", "alerts@enclava.com")
+    ALERT_TO_EMAILS: Union[str, List[str]] = os.getenv("ALERT_TO_EMAILS", "")
+    ALERT_SLACK_WEBHOOK_URL: Optional[str] = os.getenv("ALERT_SLACK_WEBHOOK_URL")
+    ALERT_PAGERDUTY_KEY: Optional[str] = os.getenv("ALERT_PAGERDUTY_KEY")
+
     # File uploads
     MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", "10485760"))  # 10MB
 

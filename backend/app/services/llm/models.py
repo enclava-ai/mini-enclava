@@ -68,7 +68,13 @@ class ChatRequest(BaseModel):
         None, description="Tool choice preference"
     )
     user_id: str = Field(..., description="User identifier")
-    api_key_id: int = Field(..., description="API key identifier")
+    api_key_id: Optional[int] = Field(None, description="API key identifier (None for internal/playground usage)")
+    chatbot_id: Optional[str] = Field(
+        None, description="Chatbot identifier for tracking"
+    )
+    agent_config_id: Optional[int] = Field(
+        None, description="Agent config identifier for tracking"
+    )
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
     @validator("messages")
@@ -134,7 +140,7 @@ class EmbeddingRequest(BaseModel):
     encoding_format: Optional[str] = Field("float", description="Encoding format")
     dimensions: Optional[int] = Field(None, ge=1, description="Number of dimensions")
     user_id: str = Field(..., description="User identifier")
-    api_key_id: int = Field(..., description="API key identifier")
+    api_key_id: Optional[int] = Field(None, description="API key identifier (None for internal/playground usage)")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
     @validator("input")

@@ -51,7 +51,7 @@ async def create_chat_completion_with_tools(
 
     # Set user context in request
     request.user_id = str(user_id)
-    request.api_key_id = 1  # Default for internal usage
+    request.api_key_id = None  # None = Playground/internal usage (JWT auth)
 
     response = await service.create_chat_completion_with_tools(
         request=request,
@@ -80,7 +80,7 @@ async def create_chat_completion_stream_with_tools(
 
     # Set user context in request
     request.user_id = str(user_id)
-    request.api_key_id = 1  # Default for internal usage
+    request.api_key_id = None  # None = Playground/internal usage (JWT auth)
 
     async def stream_generator():
         async for chunk in service.create_chat_completion_stream_with_tools(

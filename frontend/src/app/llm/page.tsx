@@ -18,7 +18,8 @@ import {
   Save,
   AlertTriangle,
   Plus,
-  Sparkles
+  Sparkles,
+  BarChart3
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { apiClient } from '@/lib/api-client'
@@ -28,6 +29,7 @@ import { useSearchParams } from 'next/navigation'
 import ChatPlayground from '@/components/playground/ChatPlayground'
 import EmbeddingPlayground from '@/components/playground/EmbeddingPlayground'
 import ModelSelector from '@/components/playground/ModelSelector'
+import UsageTab from '@/components/llm/UsageTab'
 
 interface PromptTemplate {
   id: string
@@ -61,7 +63,11 @@ export default function LLMPage() {
 function LLMPageContent() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const [activeTab, setActiveTab] = useState(tabParam === 'prompt-templates' ? 'prompt-templates' : 'playground')
+  const [activeTab, setActiveTab] = useState(() => {
+    if (tabParam === 'prompt-templates') return 'prompt-templates'
+    if (tabParam === 'playground') return 'playground'
+    return 'usage' // Default to usage tab
+  })
   const [selectedModel, setSelectedModel] = useState('')
   const [playgroundTab, setPlaygroundTab] = useState('chat')
   const { isAuthenticated } = useAuth()
@@ -282,15 +288,23 @@ function LLMPageContent() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">LLM</h1>
         <p className="text-muted-foreground">
-          Test models in the playground and manage prompt templates.
+          Monitor usage statistics, test models in the playground, and manage prompt templates.
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="usage" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Usage
+          </TabsTrigger>
           <TabsTrigger value="playground">Playground</TabsTrigger>
           <TabsTrigger value="prompt-templates">Prompt Templates</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="usage" className="mt-6">
+          <UsageTab />
+        </TabsContent>
 
         <TabsContent value="playground" className="mt-6">
           <Card>

@@ -467,7 +467,7 @@ Please improve this prompt to make it more effective for a {request.chatbot_type
             temperature=0.3,
             max_tokens=1000,
             user_id=str(user_id),
-            api_key_id=1,  # Using default API key, you might want to make this dynamic
+            api_key_id=None,  # None = Playground/internal usage (JWT auth)
         )
 
         # Make the AI call

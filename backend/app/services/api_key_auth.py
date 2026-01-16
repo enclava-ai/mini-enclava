@@ -174,7 +174,17 @@ async def get_api_key_context(
     if not api_key:
         return None
 
-    return await auth_service.validate_api_key(api_key, request)
+    context = await auth_service.validate_api_key(api_key, request)
+
+    # Store API key on request.state for middleware access (Issue #4 fix)
+    if context:
+        api_key_obj = context.get("api_key")
+        if api_key_obj:
+            request.state.api_key = api_key_obj
+        # Also store full auth context
+        request.state.auth_context = context
+
+    return context
 
 
 async def require_api_key(

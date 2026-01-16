@@ -90,6 +90,9 @@ class APIKeyResponse(BaseModel):
     budget_type: Optional[str] = None  # Budget type
     is_unlimited: bool = True  # Unlimited budget flag
     tags: List[str]
+    # Soft delete fields (optional - only present when include_deleted=true)
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -121,6 +124,8 @@ class APIKeyResponse(BaseModel):
             "budget_type": api_key.budget_type,
             "is_unlimited": api_key.is_unlimited,
             "tags": api_key.tags,
+            "is_deleted": api_key.is_deleted,
+            "deleted_at": api_key.deleted_at,
         }
         return cls(**data)
 
@@ -151,6 +156,64 @@ class APIKeyUsageResponse(BaseModel):
     last_used_at: Optional[datetime] = None
 
 
+class APIKeyDeleteRequest(BaseModel):
+    """Request body for soft deleting an API key"""
+
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class APIKeyAdminResponse(APIKeyResponse):
+    """Extended response for admin endpoints with soft delete info"""
+
+    deleted_at: Optional[datetime] = None
+    deleted_by_user_id: Optional[int] = None
+    deletion_reason: Optional[str] = None
+    user_id: int
+
+    @classmethod
+    def from_api_key(cls, api_key):
+        """Create admin response from APIKey model"""
+        data = {
+            "id": api_key.id,
+            "name": api_key.name,
+            "description": api_key.description,
+            "key_prefix": api_key.key_prefix + "..." if api_key.key_prefix else "",
+            "scopes": api_key.scopes,
+            "is_active": api_key.is_active,
+            "expires_at": api_key.expires_at,
+            "created_at": api_key.created_at,
+            "last_used_at": api_key.last_used_at,
+            "total_requests": api_key.total_requests,
+            "total_tokens": api_key.total_tokens,
+            "total_cost": api_key.total_cost,
+            "rate_limit_per_minute": api_key.rate_limit_per_minute,
+            "rate_limit_per_hour": api_key.rate_limit_per_hour,
+            "rate_limit_per_day": api_key.rate_limit_per_day,
+            "allowed_ips": api_key.allowed_ips,
+            "allowed_models": api_key.allowed_models,
+            "allowed_chatbots": api_key.allowed_chatbots,
+            "allowed_agents": api_key.allowed_agents or [],
+            "budget_limit_cents": api_key.budget_limit_cents,
+            "budget_type": api_key.budget_type,
+            "is_unlimited": api_key.is_unlimited,
+            "tags": api_key.tags,
+            "deleted_at": api_key.deleted_at,
+            "deleted_by_user_id": api_key.deleted_by_user_id,
+            "deletion_reason": api_key.deletion_reason,
+            "user_id": api_key.user_id,
+        }
+        return cls(**data)
+
+
+class APIKeyAdminListResponse(BaseModel):
+    """Response for admin list of API keys"""
+
+    api_keys: List[APIKeyAdminResponse]
+    total: int
+    page: int
+    size: int
+
+
 def generate_api_key() -> tuple[str, str]:
     """Generate a new API key and return (full_key, key_hash)"""
     # Generate random key part (32 characters)
@@ -176,11 +239,17 @@ async def list_api_keys(
     size: int = Query(10, ge=1, le=100),
     user_id: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
+    include_deleted: bool = Query(
+        False, description="Include soft-deleted API keys in the results"
+    ),
     search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List API keys with pagination and filtering"""
+    """List API keys with pagination and filtering.
+
+    By default, soft-deleted keys are excluded. Use include_deleted=true to see them.
+    """
 
     # Check permissions - users can view their own API keys
     if user_id and int(user_id) != current_user["id"]:
@@ -201,6 +270,10 @@ async def list_api_keys(
     # Build query
     query = select(APIKey)
 
+    # By default, exclude deleted keys
+    if not include_deleted:
+        query = query.where(APIKey.deleted_at.is_(None))
+
     # Apply filters
     if user_id:
         query = query.where(
@@ -217,7 +290,9 @@ async def list_api_keys(
     # Get total count using func.count()
     total_query = select(func.count(APIKey.id))
 
-    # Apply same filters for count
+    # Apply same filters for count (including deleted filter)
+    if not include_deleted:
+        total_query = total_query.where(APIKey.deleted_at.is_(None))
     if user_id:
         total_query = total_query.where(
             APIKey.user_id == (int(user_id) if isinstance(user_id, str) else user_id)
@@ -421,12 +496,18 @@ async def update_api_key(
 @router.delete("/{api_key_id}")
 async def delete_api_key(
     api_key_id: str,
+    delete_request: Optional[APIKeyDeleteRequest] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete API key"""
+    """
+    Soft delete an API key.
 
-    # Get API key
+    The key will no longer work but is preserved for billing history.
+    Usage records maintain their foreign key reference to this key.
+    """
+
+    # Get API key (including already deleted ones to provide proper error message)
     query = select(APIKey).where(APIKey.id == int(api_key_id))
     result = await db.execute(query)
     api_key = result.scalar_one_or_none()
@@ -436,29 +517,49 @@ async def delete_api_key(
             status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
         )
 
+    # Check if already deleted
+    if api_key.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API key is already deleted",
+        )
+
     # Check permissions - users can delete their own API keys
     if api_key.user_id != current_user["id"]:
         require_permission(
             current_user.get("permissions", []), "platform:api-keys:delete"
         )
 
-    # Delete API key
-    await db.delete(api_key)
+    # Extract deletion reason from request body
+    reason = delete_request.reason if delete_request else None
+
+    # Soft delete API key (preserves for billing)
+    api_key.soft_delete(deleted_by_user_id=current_user["id"], reason=reason)
     await db.commit()
+
+    # Invalidate API key cache
+    from app.services.cached_api_key import cached_api_key_service
+
+    await cached_api_key_service.invalidate_api_key_cache(api_key.key_prefix)
 
     # Log audit event
     await log_audit_event(
         db=db,
         user_id=current_user["id"],
-        action="delete_api_key",
+        action="soft_delete_api_key",
         resource_type="api_key",
         resource_id=api_key_id,
-        details={"name": api_key.name},
+        details={"name": api_key.name, "reason": reason},
     )
 
-    logger.info(f"API key deleted: {api_key.name} by {current_user['username']}")
+    logger.info(
+        f"API key soft deleted: {api_key.name} by {current_user['username']} (reason: {reason})"
+    )
 
-    return {"message": "API key deleted successfully"}
+    return {
+        "message": "API key deleted successfully",
+        "deleted_at": api_key.deleted_at.isoformat(),
+    }
 
 
 @router.post("/{api_key_id}/regenerate", response_model=APIKeyCreateResponse)
@@ -674,3 +775,286 @@ async def deactivate_api_key(
     logger.info(f"API key deactivated: {api_key.name} by {current_user['username']}")
 
     return {"message": "API key deactivated successfully"}
+
+
+# =============================================================================
+# Admin Endpoints for Soft-Deleted API Keys
+# =============================================================================
+
+
+@router.get("/admin/deleted", response_model=APIKeyAdminListResponse)
+async def list_deleted_api_keys(
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=1, le=100),
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    search: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    List all soft-deleted API keys.
+
+    Admin-only endpoint for viewing deleted keys across the platform.
+    Useful for auditing and restoration.
+    """
+
+    # Require admin permission
+    require_permission(
+        current_user.get("permissions", []), "platform:api-keys:admin"
+    )
+
+    # Build query - only deleted keys
+    query = select(APIKey).where(APIKey.deleted_at.isnot(None))
+
+    # Apply filters
+    if user_id:
+        query = query.where(APIKey.user_id == user_id)
+    if search:
+        query = query.where(
+            (APIKey.name.ilike(f"%{search}%"))
+            | (APIKey.description.ilike(f"%{search}%"))
+        )
+
+    # Get total count
+    total_query = select(func.count(APIKey.id)).where(APIKey.deleted_at.isnot(None))
+    if user_id:
+        total_query = total_query.where(APIKey.user_id == user_id)
+    if search:
+        total_query = total_query.where(
+            (APIKey.name.ilike(f"%{search}%"))
+            | (APIKey.description.ilike(f"%{search}%"))
+        )
+
+    total_result = await db.execute(total_query)
+    total = total_result.scalar()
+
+    # Apply pagination
+    offset = (page - 1) * size
+    query = query.offset(offset).limit(size).order_by(APIKey.deleted_at.desc())
+
+    # Execute query
+    result = await db.execute(query)
+    api_keys = result.scalars().all()
+
+    # Log audit event
+    await log_audit_event(
+        db=db,
+        user_id=current_user["id"],
+        action="list_deleted_api_keys",
+        resource_type="api_key",
+        details={"page": page, "size": size, "user_id_filter": user_id},
+    )
+
+    return APIKeyAdminListResponse(
+        api_keys=[APIKeyAdminResponse.from_api_key(key) for key in api_keys],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+@router.get("/admin/all", response_model=APIKeyAdminListResponse)
+async def list_all_api_keys_admin(
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=1, le=100),
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    include_deleted: bool = Query(True, description="Include deleted keys (default: True)"),
+    is_active: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    List all API keys (admin view).
+
+    Admin-only endpoint that returns all API keys including deleted ones by default.
+    Provides complete visibility for billing, auditing, and support purposes.
+    """
+
+    # Require admin permission
+    require_permission(
+        current_user.get("permissions", []), "platform:api-keys:admin"
+    )
+
+    # Build query
+    query = select(APIKey)
+
+    # Apply deleted filter
+    if not include_deleted:
+        query = query.where(APIKey.deleted_at.is_(None))
+
+    # Apply filters
+    if user_id:
+        query = query.where(APIKey.user_id == user_id)
+    if is_active is not None:
+        query = query.where(APIKey.is_active == is_active)
+    if search:
+        query = query.where(
+            (APIKey.name.ilike(f"%{search}%"))
+            | (APIKey.description.ilike(f"%{search}%"))
+        )
+
+    # Get total count
+    total_query = select(func.count(APIKey.id))
+    if not include_deleted:
+        total_query = total_query.where(APIKey.deleted_at.is_(None))
+    if user_id:
+        total_query = total_query.where(APIKey.user_id == user_id)
+    if is_active is not None:
+        total_query = total_query.where(APIKey.is_active == is_active)
+    if search:
+        total_query = total_query.where(
+            (APIKey.name.ilike(f"%{search}%"))
+            | (APIKey.description.ilike(f"%{search}%"))
+        )
+
+    total_result = await db.execute(total_query)
+    total = total_result.scalar()
+
+    # Apply pagination
+    offset = (page - 1) * size
+    query = query.offset(offset).limit(size).order_by(APIKey.created_at.desc())
+
+    # Execute query
+    result = await db.execute(query)
+    api_keys = result.scalars().all()
+
+    # Log audit event
+    await log_audit_event(
+        db=db,
+        user_id=current_user["id"],
+        action="list_all_api_keys_admin",
+        resource_type="api_key",
+        details={
+            "page": page,
+            "size": size,
+            "user_id_filter": user_id,
+            "include_deleted": include_deleted,
+        },
+    )
+
+    return APIKeyAdminListResponse(
+        api_keys=[APIKeyAdminResponse.from_api_key(key) for key in api_keys],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+@router.post("/admin/{api_key_id}/restore", response_model=APIKeyAdminResponse)
+async def restore_api_key(
+    api_key_id: str,
+    activate: bool = Query(
+        False, description="Also activate the key after restoring"
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Restore a soft-deleted API key.
+
+    Admin-only endpoint to restore a deleted API key.
+    The key's is_active status is NOT automatically changed unless activate=true.
+    """
+
+    # Require admin permission
+    require_permission(
+        current_user.get("permissions", []), "platform:api-keys:admin"
+    )
+
+    # Get API key
+    query = select(APIKey).where(APIKey.id == int(api_key_id))
+    result = await db.execute(query)
+    api_key = result.scalar_one_or_none()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
+        )
+
+    # Check if the key is actually deleted
+    if not api_key.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API key is not deleted",
+        )
+
+    # Store original deleted info for audit
+    original_deleted_at = api_key.deleted_at
+    original_deleted_by = api_key.deleted_by_user_id
+    original_reason = api_key.deletion_reason
+
+    # Restore the key
+    api_key.restore()
+
+    # Optionally activate the key
+    if activate:
+        api_key.is_active = True
+
+    await db.commit()
+    await db.refresh(api_key)
+
+    # Log audit event
+    await log_audit_event(
+        db=db,
+        user_id=current_user["id"],
+        action="restore_api_key",
+        resource_type="api_key",
+        resource_id=api_key_id,
+        details={
+            "name": api_key.name,
+            "activated": activate,
+            "original_deleted_at": original_deleted_at.isoformat()
+            if original_deleted_at
+            else None,
+            "original_deleted_by": original_deleted_by,
+            "original_reason": original_reason,
+        },
+    )
+
+    logger.info(
+        f"API key restored: {api_key.name} by {current_user['username']} "
+        f"(activated: {activate})"
+    )
+
+    return APIKeyAdminResponse.from_api_key(api_key)
+
+
+@router.get("/admin/{api_key_id}", response_model=APIKeyAdminResponse)
+async def get_api_key_admin(
+    api_key_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get API key details (admin view).
+
+    Admin-only endpoint that returns complete API key info including
+    soft-delete details. Works for both deleted and non-deleted keys.
+    """
+
+    # Require admin permission
+    require_permission(
+        current_user.get("permissions", []), "platform:api-keys:admin"
+    )
+
+    # Get API key (including deleted ones)
+    query = select(APIKey).where(APIKey.id == int(api_key_id))
+    result = await db.execute(query)
+    api_key = result.scalar_one_or_none()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
+        )
+
+    # Log audit event
+    await log_audit_event(
+        db=db,
+        user_id=current_user["id"],
+        action="get_api_key_admin",
+        resource_type="api_key",
+        resource_id=api_key_id,
+    )
+
+    return APIKeyAdminResponse.from_api_key(api_key)

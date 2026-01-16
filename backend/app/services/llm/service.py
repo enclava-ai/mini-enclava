@@ -383,6 +383,18 @@ class LLMService:
             "resilience": resilience_health,
         }
 
+    def get_provider_for_model(self, model: str) -> str:
+        """
+        Get provider name for a model (public API).
+
+        Args:
+            model: Model name
+
+        Returns:
+            Provider name string
+        """
+        return self._get_provider_for_model(model)
+
     def _get_provider_for_model(self, model: str) -> str:
         """Get provider name for a model"""
         # Check model routing first

@@ -98,6 +98,32 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         # Get analytics data from context (set by endpoints)
         context_data = analytics_context.get({})
 
+        # ISSUE #4 FIX: Extract API key info from request state (set by auth dependency)
+        # This must be done AFTER call_next() since authentication runs during the request
+        try:
+            api_key = getattr(request.state, "api_key", None)
+            if api_key:
+                api_key_id = api_key.id
+                # Also get user_id from API key if not set from JWT
+                if user_id is None:
+                    user_id = api_key.user_id
+
+            # Also try auth_context if using dependency injection
+            if api_key_id is None:
+                auth_context = getattr(request.state, "auth_context", None)
+                if auth_context:
+                    api_key_id = auth_context.get("api_key_id")
+                    if user_id is None:
+                        user_id = auth_context.get("user_id")
+
+            # Also check context_data from set_analytics_data calls
+            if api_key_id is None:
+                api_key_id = context_data.get("api_key_id")
+            if user_id is None:
+                user_id = context_data.get("user_id")
+        except Exception as e:
+            logger.debug(f"Could not extract API key info from request state: {e}")
+
         # Create analytics event
         event = RequestEvent(
             timestamp=datetime.utcnow(),

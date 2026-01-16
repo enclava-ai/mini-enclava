@@ -4,6 +4,8 @@ Chatbot API endpoints
 
 import asyncio
 import time
+from uuid import uuid4
+from uuid import UUID
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -25,6 +27,11 @@ from app.models.user import User
 from app.services.api_key_auth import get_api_key_auth
 from app.models.api_key import APIKey
 from app.services.conversation_service import ConversationService
+from app.services.usage_recording import UsageRecordingService
+from app.services.cost_calculator import CostCalculator
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -319,9 +326,13 @@ async def chat_with_chatbot(
     db: AsyncSession = Depends(get_db),
 ):
     """Send a message to a chatbot and get a response (without persisting conversation)"""
+    start_time = time.time()
+    request_id = uuid4()
     user_id = (
         current_user.get("id") if isinstance(current_user, dict) else current_user.id
     )
+    usage_service = UsageRecordingService(db)
+
     log_api_request(
         "chat_with_chatbot",
         {
@@ -346,6 +357,9 @@ async def chat_with_chatbot(
         if not chatbot.is_active:
             raise HTTPException(status_code=400, detail="Chatbot is not active")
 
+        model = chatbot.config.get("model", "gpt-3.5-turbo")
+        response_data = {}
+
         # Get chatbot module and generate response
         try:
             chatbot_module = module_manager.modules.get("chatbot")
@@ -366,6 +380,32 @@ async def chat_with_chatbot(
                 "response", "I'm sorry, I couldn't generate a response."
             )
 
+            # Extract token counts from response_data if available
+            input_tokens = response_data.get("input_tokens", response_data.get("prompt_tokens", 0))
+            output_tokens = response_data.get("output_tokens", response_data.get("completion_tokens", 0))
+
+            # Record successful usage
+            latency_ms = int((time.time() - start_time) * 1000)
+            await usage_service.record_request(
+                request_id=request_id,
+                user_id=user_id,
+                api_key_id=None,  # None = Chatbot testing (JWT auth)
+                provider_id="privatemode",
+                provider_model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                endpoint=f"/api-internal/v1/chatbot/chat/{chatbot_id}",
+                method="POST",
+                chatbot_id=chatbot_id,
+                is_streaming=False,
+                message_count=1,
+                latency_ms=latency_ms,
+                status="success",
+            )
+            await db.commit()
+
+        except HTTPException:
+            raise
         except Exception as e:
             # Use fallback response
             fallback_responses = chatbot.config.get(
@@ -377,6 +417,20 @@ async def chat_with_chatbot(
                 if fallback_responses
                 else "I'm sorry, I couldn't process your request."
             )
+
+            # Record error usage
+            latency_ms = int((time.time() - start_time) * 1000)
+            await usage_service.record_error(
+                user_id=user_id,
+                api_key_id=None,
+                provider_id="privatemode",
+                model=model,
+                endpoint=f"/api-internal/v1/chatbot/chat/{chatbot_id}",
+                error=e,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+            await db.commit()
 
         # Return response without conversation ID (since we're not persisting)
         return {"response": response_content, "sources": response_data.get("sources")}
@@ -522,9 +576,33 @@ async def chatbot_chat_completions(
         completion_tokens = len(response_content.split())
         total_tokens = prompt_tokens + completion_tokens
 
-        # Create OpenAI-compatible response
-        response_id = f"chatbot-{chatbot_id}-{int(time.time())}"
+        # Record usage for audit trail
+        try:
+            usage_service = UsageRecordingService(db)
+            response_id = uuid4()
 
+            # Record with proper usage tracking
+            await usage_service.record_request(
+                request_id=response_id,
+                user_id=int(user_id) if user_id else None,
+                api_key_id=None,
+                provider_id="privatemode",
+                provider_model=chatbot.config.get("model", "unknown"),
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+                endpoint="/chatbot/{chatbot_id}/chat/completions",
+                method="POST",
+                chatbot_id=chatbot_id,
+                message_count=len(request.messages),
+                is_streaming=False,
+                status="success",
+            )
+            await db.commit()
+        except Exception as usage_error:
+            logger.error(f"Failed to record usage for chatbot request: {usage_error}")
+            await db.rollback()
+
+        # Create OpenAI-compatible response
         return ChatbotChatCompletionResponse(
             id=response_id,
             object="chat.completion",
@@ -794,10 +872,7 @@ async def get_tool_config(
 
         tool_config = extract_tool_config(chatbot.config)
 
-        return {
-            "chatbot_id": chatbot_id,
-            "tool_config": tool_config
-        }
+        return {"chatbot_id": chatbot_id, "tool_config": tool_config}
 
     except HTTPException:
         raise
@@ -821,7 +896,11 @@ async def update_tool_config(
     )
     log_api_request(
         "update_tool_config",
-        {"user_id": user_id, "chatbot_id": chatbot_id, "config": request.dict(exclude_unset=True)},
+        {
+            "user_id": user_id,
+            "chatbot_id": chatbot_id,
+            "config": request.dict(exclude_unset=True),
+        },
     )
 
     try:
@@ -864,14 +943,16 @@ async def update_tool_config(
         return {
             "message": "Tool config updated successfully",
             "chatbot_id": chatbot_id,
-            "tool_config": tool_config
+            "tool_config": tool_config,
         }
 
     except HTTPException:
         raise
     except Exception as e:
         await db.rollback()
-        log_api_request("update_tool_config_error", {"error": str(e), "user_id": user_id})
+        log_api_request(
+            "update_tool_config_error", {"error": str(e), "user_id": user_id}
+        )
         raise HTTPException(
             status_code=500, detail=f"Failed to update tool config: {str(e)}"
         )
@@ -885,6 +966,10 @@ async def external_chat_with_chatbot(
     db: AsyncSession = Depends(get_db),
 ):
     """External API endpoint for chatbot access with API key authentication"""
+    start_time = time.time()
+    request_id = uuid4()
+    usage_service = UsageRecordingService(db)
+
     log_api_request(
         "external_chat_with_chatbot",
         {
@@ -913,6 +998,8 @@ async def external_chat_with_chatbot(
         if not chatbot.is_active:
             raise HTTPException(status_code=400, detail="Chatbot is not active")
 
+        model = chatbot.config.get("model", "gpt-3.5-turbo")
+
         # Initialize conversation service
         conversation_service = ConversationService(db)
 
@@ -936,6 +1023,9 @@ async def external_chat_with_chatbot(
             content=request.message,
             metadata={"api_key_id": api_key.id},
         )
+
+        response_data = {}
+        sources = None
 
         # Get chatbot module and generate response
         try:
@@ -965,6 +1055,32 @@ async def external_chat_with_chatbot(
             )
             sources = response_data.get("sources")
 
+            # Extract token counts from response_data if available
+            input_tokens = response_data.get("input_tokens", response_data.get("prompt_tokens", 0))
+            output_tokens = response_data.get("output_tokens", response_data.get("completion_tokens", 0))
+            total_tokens = input_tokens + output_tokens
+
+            # Record successful usage to usage_records table
+            latency_ms = int((time.time() - start_time) * 1000)
+            await usage_service.record_request(
+                request_id=request_id,
+                user_id=api_key.user_id,
+                api_key_id=api_key.id,
+                provider_id="privatemode",
+                provider_model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                endpoint=f"/api/v1/chatbot/external/{chatbot_id}/chat",
+                method="POST",
+                chatbot_id=chatbot_id,
+                is_streaming=False,
+                message_count=1,
+                latency_ms=latency_ms,
+                status="success",
+            )
+
+        except HTTPException:
+            raise
         except Exception as e:
             # Use fallback response
             fallback_responses = chatbot.config.get(
@@ -977,6 +1093,22 @@ async def external_chat_with_chatbot(
                 else "I'm sorry, I couldn't process your request."
             )
             sources = None
+            input_tokens = 0
+            output_tokens = 0
+            total_tokens = 0
+
+            # Record error usage
+            latency_ms = int((time.time() - start_time) * 1000)
+            await usage_service.record_error(
+                user_id=api_key.user_id,
+                api_key_id=api_key.id,
+                provider_id="privatemode",
+                model=model,
+                endpoint=f"/api/v1/chatbot/external/{chatbot_id}/chat",
+                error=e,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
 
         # Save assistant message using conversation service
         assistant_message = await conversation_service.add_message(
@@ -987,10 +1119,8 @@ async def external_chat_with_chatbot(
             sources=sources,
         )
 
-        # Update API key usage stats
-        api_key.update_usage(
-            tokens_used=len(request.message) + len(response_content), cost_cents=0
-        )
+        # Update API key usage stats with actual tokens
+        api_key.update_usage(tokens_used=total_tokens, cost_cents=0)
         await db.commit()
 
         return {
@@ -1139,6 +1269,10 @@ async def external_chatbot_chat_completions(
     db: AsyncSession,
 ):
     """External OpenAI-compatible chat completions endpoint implementation with API key authentication"""
+    start_time = time.time()
+    request_id = uuid4()
+    usage_service = UsageRecordingService(db)
+
     log_api_request(
         "external_chatbot_chat_completions",
         {
@@ -1166,6 +1300,8 @@ async def external_chatbot_chat_completions(
 
         if not chatbot.is_active:
             raise HTTPException(status_code=400, detail="Chatbot is not active")
+
+        model = chatbot.config.get("model", "gpt-3.5-turbo")
 
         # Find the last user message to extract conversation context
         user_messages = [msg for msg in request.messages if msg.role == "user"]
@@ -1206,6 +1342,11 @@ async def external_chatbot_chat_completions(
             if msg.role in ["user", "assistant"]:
                 conversation_history.append({"role": msg.role, "content": msg.content})
 
+        response_data = {}
+        sources = None
+        input_tokens = 0
+        output_tokens = 0
+
         # Get chatbot module and generate response
         try:
             chatbot_module = module_manager.modules.get("chatbot")
@@ -1234,6 +1375,31 @@ async def external_chatbot_chat_completions(
             )
             sources = response_data.get("sources")
 
+            # Extract actual token counts from response_data if available
+            input_tokens = response_data.get("input_tokens", response_data.get("prompt_tokens", 0))
+            output_tokens = response_data.get("output_tokens", response_data.get("completion_tokens", 0))
+
+            # Record successful usage to usage_records table
+            latency_ms = int((time.time() - start_time) * 1000)
+            await usage_service.record_request(
+                request_id=request_id,
+                user_id=api_key.user_id,
+                api_key_id=api_key.id,
+                provider_id="privatemode",
+                provider_model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                endpoint=f"/api/v1/chatbot/{chatbot_id}/chat/completions",
+                method="POST",
+                chatbot_id=chatbot_id,
+                is_streaming=False,
+                message_count=len(request.messages),
+                latency_ms=latency_ms,
+                status="success",
+            )
+
+        except HTTPException:
+            raise
         except Exception as e:
             # Use fallback response
             fallback_responses = chatbot.config.get(
@@ -1246,6 +1412,20 @@ async def external_chatbot_chat_completions(
                 else "I'm sorry, I couldn't process your request."
             )
             sources = None
+
+            # Record error usage
+            latency_ms = int((time.time() - start_time) * 1000)
+            await usage_service.record_error(
+                user_id=api_key.user_id,
+                api_key_id=api_key.id,
+                provider_id="privatemode",
+                model=model,
+                endpoint=f"/api/v1/chatbot/{chatbot_id}/chat/completions",
+                error=e,
+                latency_ms=latency_ms,
+                request_id=request_id,
+                message_count=len(request.messages),
+            )
 
         # Save the conversation messages
         for msg in request.messages:
@@ -1266,10 +1446,8 @@ async def external_chatbot_chat_completions(
             sources=sources,
         )
 
-        # Update API key usage stats
-        prompt_tokens = sum(len(msg.content.split()) for msg in request.messages)
-        completion_tokens = len(response_content.split())
-        total_tokens = prompt_tokens + completion_tokens
+        # Use actual token counts for API key stats
+        total_tokens = input_tokens + output_tokens
 
         api_key.update_usage(tokens_used=total_tokens, cost_cents=0)
         await db.commit()
@@ -1281,7 +1459,7 @@ async def external_chatbot_chat_completions(
             id=response_id,
             object="chat.completion",
             created=int(time.time()),
-            model=chatbot.config.get("model", "unknown"),
+            model=model,
             choices=[
                 ChatChoice(
                     index=0,
@@ -1290,8 +1468,8 @@ async def external_chatbot_chat_completions(
                 )
             ],
             usage=ChatUsage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
                 total_tokens=total_tokens,
             ),
         )

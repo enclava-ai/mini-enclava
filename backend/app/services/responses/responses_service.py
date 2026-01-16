@@ -21,6 +21,9 @@ from app.services.responses.translator import ItemMessageTranslator
 from app.services.tool_calling_service import ToolCallingService
 from app.services.llm.models import ChatRequest, ChatMessage
 from app.services.budget_enforcement import BudgetEnforcementService
+from app.services.usage_recording import UsageRecordingService
+from app.services.llm.streaming_tracker import StreamingUsage
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -92,13 +95,8 @@ class ResponsesService:
             # 5. Estimate tokens for budget check
             estimated_tokens = self._estimate_tokens(input_items, request.instructions)
 
-            # 6. Budget check and reserve
-            (
-                is_allowed,
-                error_msg,
-                warnings,
-                reserved_budget_ids
-            ) = self.budget_service.atomic_check_and_reserve_budget(
+            # 6. Budget check (simple - just check if already exceeded)
+            is_allowed, error_msg, warnings = self.budget_service.check_budget_compliance(
                 api_key,
                 request.model,
                 estimated_tokens
@@ -150,15 +148,33 @@ class ResponsesService:
             assistant_message = llm_response.choices[0].message
             output_items = self.translator.messages_to_output_items([assistant_message])
 
-            # 13. Finalize budget with actual usage
-            if reserved_budget_ids:
-                self.budget_service.atomic_finalize_usage(
-                    reserved_budget_ids,
-                    api_key,
-                    request.model,
-                    total_input_tokens,
-                    total_output_tokens
-                )
+            # 13. Record actual budget usage
+            self.budget_service.record_usage(
+                api_key,
+                request.model,
+                total_input_tokens,
+                total_output_tokens
+            )
+
+            # 13.5 Record usage to usage_records table (source of truth for billing)
+            execution_time = (time.time() - start_time) * 1000
+            usage_service = UsageRecordingService(self.db)
+            await usage_service.record_request(
+                request_id=uuid4(),
+                user_id=user.id,
+                api_key_id=api_key.id,
+                provider_id="privatemode",
+                provider_model=request.model,
+                input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens,
+                endpoint="/v1/responses",
+                method="POST",
+                is_streaming=False,
+                is_tool_calling=bool(llm_response.choices[0].message.tool_calls) if llm_response.choices else False,
+                message_count=len(messages),
+                latency_ms=int(execution_time),
+                status="success",
+            )
 
             # 14. Create response object
             response_obj = ResponseObject(
@@ -196,7 +212,6 @@ class ResponsesService:
                     user.id
                 )
 
-            execution_time = (time.time() - start_time) * 1000
             logger.info(
                 f"Response {response_id} created successfully in {execution_time:.2f}ms, "
                 f"tokens: {total_input_tokens + total_output_tokens}"
@@ -616,7 +631,7 @@ class ResponsesService:
             SSE formatted event strings
         """
         from app.services.responses.streaming import (
-            stream_response_events_with_tools,
+            stream_response_events_with_tracking,
             ResponseStreamEvent,
             ResponseStreamEventType
         )
@@ -657,13 +672,8 @@ class ResponsesService:
             # 5. Estimate tokens for budget check
             estimated_tokens = self._estimate_tokens(input_items, request.instructions)
 
-            # 6. Budget check and reserve
-            (
-                is_allowed,
-                error_msg,
-                warnings,
-                reserved_budget_ids
-            ) = self.budget_service.atomic_check_and_reserve_budget(
+            # 6. Budget check (simple - just check if already exceeded)
+            is_allowed, error_msg, warnings = self.budget_service.check_budget_compliance(
                 api_key,
                 request.model,
                 estimated_tokens
@@ -704,17 +714,59 @@ class ResponsesService:
                 stream=True  # Enable streaming
             )
 
-            # 10. Stream response with tool execution support
+            # 10. Create usage recording callback
+            request_id = uuid4()
+            usage_service = UsageRecordingService(self.db)
+
+            async def record_streaming_usage(
+                usage: StreamingUsage, status: str, had_error: bool
+            ) -> None:
+                """Callback to record usage when streaming completes."""
+                try:
+                    # Record to usage_records table
+                    await usage_service.record_request(
+                        request_id=request_id,
+                        user_id=user.id if hasattr(user, "id") else user.get("id"),
+                        api_key_id=api_key.id if api_key else None,
+                        provider_id="privatemode",
+                        provider_model=request.model,
+                        input_tokens=usage.input_tokens,
+                        output_tokens=usage.output_tokens,
+                        endpoint="/v1/responses",
+                        method="POST",
+                        is_streaming=True,
+                        latency_ms=usage.total_duration_ms,
+                        ttft_ms=usage.ttft_ms,
+                        status=status,
+                        error_type="streaming_error" if had_error else None,
+                    )
+
+                    # Record actual budget usage (simple increment)
+                    if api_key:
+                        self.budget_service.record_usage(
+                            api_key,
+                            request.model,
+                            usage.input_tokens,
+                            usage.output_tokens
+                        )
+
+                    await self.db.commit()
+                except Exception as record_error:
+                    logger.error(f"Failed to record streaming usage: {record_error}")
+
+            # 11. Stream response with tool execution support and token tracking
             # This routes through the tool calling service to include tool definitions
             # and handles tool execution when tool calls are detected
-            async for event in stream_response_events_with_tools(
+            async for event in stream_response_events_with_tracking(
                 response_id=response_id,
                 model=request.model,
                 chat_request=chat_request,
                 tool_calling_service=self.tool_calling_service,
                 user=user,
                 tool_resources=tool_resources,
-                max_tool_calls=5
+                max_tool_calls=5,
+                estimated_input_tokens=estimated_tokens,
+                on_complete=record_streaming_usage,
             ):
                 yield event
 

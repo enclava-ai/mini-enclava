@@ -116,6 +116,12 @@ class Budget(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_reset_at = Column(DateTime, nullable=True)  # Last time budget was reset
 
+    # Deprecated: These fields were used for the reconciliation system which has been removed.
+    # The budget system now uses a simpler track-actual-usage pattern.
+    # Fields kept for backward compatibility with existing databases.
+    last_reconciled_at = Column(DateTime, nullable=True)  # Deprecated - no longer used
+    last_reconciliation_diff_cents = Column(Integer, nullable=True)  # Deprecated - no longer used
+
     def __repr__(self):
         return f"<Budget(id={self.id}, name='{self.name}', user_id={self.user_id}, limit=${self.limit_cents/100:.2f})>"
 

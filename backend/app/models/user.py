@@ -66,7 +66,8 @@ class User(Base):
     # Relationships
     role = relationship("Role", back_populates="users")
     api_keys = relationship(
-        "APIKey", back_populates="user", cascade="all, delete-orphan"
+        "APIKey", back_populates="user", cascade="all, delete-orphan",
+        foreign_keys="[APIKey.user_id]"
     )
     usage_tracking = relationship(
         "UsageTracking", back_populates="user", cascade="all, delete-orphan"
@@ -98,6 +99,9 @@ class User(Base):
     )
     conversations = relationship(
         "Conversation", back_populates="user", cascade="all, delete-orphan"
+    )
+    usage_records = relationship(
+        "UsageRecord", back_populates="user", cascade="all, delete-orphan"
     )
 
     def __repr__(self):
