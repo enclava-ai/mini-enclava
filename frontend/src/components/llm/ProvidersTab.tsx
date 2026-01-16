@@ -114,6 +114,36 @@ export default function ProvidersTab() {
     return `${symbol}${amount.toFixed(2)}`;
   }
 
+  // Get mode badges for a model (filter out tee/attestation as they're assumed)
+  function getModelModes(model: ProviderModel): string[] {
+    const modes: string[] = [];
+
+    // Check tasks array
+    if (model.tasks && Array.isArray(model.tasks)) {
+      if (model.tasks.includes('generate')) modes.push('generate');
+      if (model.tasks.includes('embed') || model.tasks.includes('embedding')) modes.push('embed');
+      if (model.tasks.includes('vision')) modes.push('vision');
+      if (model.tasks.includes('transcribe')) modes.push('transcribe');
+    }
+
+    // Check function calling support
+    if (model.supports_function_calling) modes.push('tool_calling');
+
+    return modes;
+  }
+
+  // Get badge style for mode
+  function getModeBadgeStyle(mode: string): string {
+    const styles: Record<string, string> = {
+      'generate': 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+      'tool_calling': 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+      'vision': 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+      'transcribe': 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
+      'embed': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300',
+    };
+    return styles[mode] || '';
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -187,22 +217,6 @@ export default function ProvidersTab() {
                 </div>
               )}
 
-              {/* Attestation details (for RedPill) */}
-              {provider.healthy && provider.attestation_details && (
-                <div className="text-sm space-y-1">
-                  <div className="flex gap-4">
-                    <span>{provider.attestation_details.intel_tdx_verified ? '✓' : '✗'} Intel TDX</span>
-                    <span>{provider.attestation_details.gpu_attestation_verified ? '✓' : '✗'} NVIDIA GPU</span>
-                    <span>{provider.attestation_details.nonce_binding_verified ? '✓' : '✗'} Nonce</span>
-                  </div>
-                  {provider.attestation_details.signing_address && (
-                    <div className="text-muted-foreground">
-                      Signer: {provider.attestation_details.signing_address.slice(0, 10)}...
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Available Models */}
               {provider.models && provider.models.length > 0 && (
                 <div className="space-y-2">
@@ -215,11 +229,16 @@ export default function ProvidersTab() {
                       >
                         <div className="font-mono text-xs break-all">{model.id}</div>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {model.capabilities.map((cap) => (
-                            <Badge key={cap} variant="secondary" className="text-xs">
-                              {cap}
+                          {getModelModes(model).map((mode) => (
+                            <Badge key={mode} className={`text-xs border-0 ${getModeBadgeStyle(mode)}`}>
+                              {mode}
                             </Badge>
                           ))}
+                          {model.supports_streaming && (
+                            <Badge variant="secondary" className="text-xs">
+                              streaming
+                            </Badge>
+                          )}
                         </div>
                         {model.pricing && (
                           <div className="text-xs mt-1 flex items-center gap-2">
@@ -241,8 +260,6 @@ export default function ProvidersTab() {
                           {model.max_output_tokens && (
                             <span>Max output: {model.max_output_tokens.toLocaleString()}</span>
                           )}
-                          {model.supports_streaming && <span>Streaming</span>}
-                          {model.supports_function_calling && <span>Function calling</span>}
                         </div>
                       </div>
                     ))}

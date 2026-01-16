@@ -84,18 +84,51 @@ export default function ModelSelector({ value, onValueChange, filter = 'all', cl
     fetchModels()
   }, [])
 
-  const getProviderFromModel = (modelId: string): string => {
-    // PrivateMode models have specific prefixes
-    if (modelId.startsWith('privatemode-')) return 'PrivateMode.ai'
-    
-    // Legacy detection for other providers
-    if (modelId.startsWith('gpt-') || modelId.includes('openai')) return 'OpenAI'
-    if (modelId.startsWith('claude-') || modelId.includes('anthropic')) return 'Anthropic'
-    if (modelId.startsWith('gemini-') || modelId.includes('google')) return 'Google'
-    if (modelId.includes('cohere')) return 'Cohere'
-    if (modelId.includes('mistral')) return 'Mistral'
-    if (modelId.includes('llama') && !modelId.startsWith('privatemode-')) return 'Meta'
-    return 'Unknown'
+  // Get display name for provider
+  const getProviderDisplayName = (provider: string): string => {
+    const displayNames: Record<string, string> = {
+      'privatemode': 'PrivateMode',
+      'redpill': 'RedPill',
+      'openai': 'OpenAI',
+      'anthropic': 'Anthropic',
+      'google': 'Google',
+    }
+    return displayNames[provider?.toLowerCase()] || provider || 'Unknown'
+  }
+
+  // Get provider from model object (not ID pattern matching)
+  const getProviderFromModel = (model: Model): string => {
+    return model.provider || model.owned_by || 'unknown'
+  }
+
+  // Get modes/capabilities the model supports (for badge display)
+  const getModelModes = (model: Model): string[] => {
+    const modes: string[] = []
+
+    // Check tasks array
+    if (model.tasks && Array.isArray(model.tasks)) {
+      if (model.tasks.includes('generate')) modes.push('generate')
+      if (model.tasks.includes('embed') || model.tasks.includes('embedding')) modes.push('embed')
+      if (model.tasks.includes('vision')) modes.push('vision')
+      if (model.tasks.includes('transcribe')) modes.push('transcribe')
+    }
+
+    // Check function calling support
+    if (model.supports_function_calling) modes.push('tool_calling')
+
+    return modes
+  }
+
+  // Get badge style for mode
+  const getModeBadgeStyle = (mode: string): string => {
+    const styles: Record<string, string> = {
+      'generate': 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+      'tool_calling': 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+      'vision': 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+      'transcribe': 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
+      'embed': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300',
+    }
+    return styles[mode] || ''
   }
 
   const getModelType = (model: Model): 'chat' | 'embedding' | 'other' => {
@@ -149,7 +182,7 @@ export default function ModelSelector({ value, onValueChange, filter = 'all', cl
   })
 
   const groupedModels = filteredModels.reduce((acc, model) => {
-    const provider = getProviderFromModel(model.id)
+    const provider = getProviderFromModel(model)
     if (!acc[provider]) acc[provider] = []
     acc[provider].push(model)
     return acc
@@ -245,8 +278,8 @@ export default function ModelSelector({ value, onValueChange, filter = 'all', cl
             {selectedModel && (
               <div className="flex items-center gap-2">
                 <span>{selectedModel.id}</span>
-                <Badge variant="secondary" className="text-xs">
-                  {getProviderFromModel(selectedModel.id)}
+                <Badge variant="outline" className="text-xs">
+                  {getProviderDisplayName(getProviderFromModel(selectedModel))}
                 </Badge>
               </div>
             )}
@@ -257,7 +290,7 @@ export default function ModelSelector({ value, onValueChange, filter = 'all', cl
             <div key={provider}>
               <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground flex items-center gap-2">
                 {getProviderStatusIcon(provider)}
-                <span>{provider}</span>
+                <span>{getProviderDisplayName(provider)}</span>
                 <span className="text-xs font-normal text-muted-foreground">
                   {getProviderStatusText(provider)}
                 </span>
@@ -265,21 +298,13 @@ export default function ModelSelector({ value, onValueChange, filter = 'all', cl
               {providerModels.map((model) => (
                 <SelectItem key={model.id} value={model.id}>
                   <div className="flex items-center gap-2">
-                    <span>{model.id}</span>
-                    <div className="flex gap-1">
-                      <Badge variant="outline" className="text-xs">
-                        {getModelCategory(model)}
-                      </Badge>
-                      {model.supports_streaming && (
-                        <Badge variant="secondary" className="text-xs">
-                          Streaming
+                    <span className="truncate max-w-[200px]">{model.id}</span>
+                    <div className="flex gap-1 flex-shrink-0">
+                      {getModelModes(model).map((mode) => (
+                        <Badge key={mode} className={`text-xs border-0 ${getModeBadgeStyle(mode)}`}>
+                          {mode}
                         </Badge>
-                      )}
-                      {model.supports_function_calling && (
-                        <Badge variant="secondary" className="text-xs">
-                          Functions
-                        </Badge>
-                      )}
+                      ))}
                     </div>
                   </div>
                 </SelectItem>
@@ -306,8 +331,8 @@ export default function ModelSelector({ value, onValueChange, filter = 'all', cl
               <div>
                 <span className="font-medium">Provider:</span>
                 <div className="text-muted-foreground flex items-center gap-1">
-                  {getProviderStatusIcon(getProviderFromModel(selectedModel.id))}
-                  {getProviderFromModel(selectedModel.id)}
+                  {getProviderStatusIcon(getProviderFromModel(selectedModel))}
+                  {getProviderDisplayName(getProviderFromModel(selectedModel))}
                 </div>
               </div>
               <div>
@@ -337,22 +362,19 @@ export default function ModelSelector({ value, onValueChange, filter = 'all', cl
               </div>
             )}
             
-            {(selectedModel.supports_streaming || selectedModel.supports_function_calling) && (
-              <div>
-                <span className="font-medium">Capabilities:</span>
-                <div className="flex gap-1 mt-1">
-                  {selectedModel.supports_streaming && (
-                    <Badge variant="secondary" className="text-xs">Streaming</Badge>
-                  )}
-                  {selectedModel.supports_function_calling && (
-                    <Badge variant="secondary" className="text-xs">Function Calling</Badge>
-                  )}
-                  {selectedModel.capabilities?.includes('tee') && (
-                    <Badge variant="outline" className="text-xs border-green-500 text-green-700">TEE Protected</Badge>
-                  )}
-                </div>
+            <div>
+              <span className="font-medium">Modes:</span>
+              <div className="flex gap-1 mt-1 flex-wrap">
+                {getModelModes(selectedModel).map((mode) => (
+                  <Badge key={mode} className={`text-xs border-0 ${getModeBadgeStyle(mode)}`}>
+                    {mode}
+                  </Badge>
+                ))}
+                {selectedModel.supports_streaming && (
+                  <Badge variant="secondary" className="text-xs">streaming</Badge>
+                )}
               </div>
-            )}
+            </div>
             
             {selectedModel.created && (
               <div>
@@ -371,12 +393,12 @@ export default function ModelSelector({ value, onValueChange, filter = 'all', cl
             )}
             
             {/* Provider Status Details */}
-            {providerStatus[getProviderFromModel(selectedModel.id).toLowerCase()] && (
+            {providerStatus[getProviderFromModel(selectedModel).toLowerCase()] && (
               <div className="border-t pt-3">
                 <span className="font-medium">Provider Status:</span>
                 <div className="mt-1 text-xs space-y-1">
                   {(() => {
-                    const status = providerStatus[getProviderFromModel(selectedModel.id).toLowerCase()]
+                    const status = providerStatus[getProviderFromModel(selectedModel).toLowerCase()]
                     return (
                       <>
                         <div className="flex justify-between">

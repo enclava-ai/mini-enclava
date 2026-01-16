@@ -64,6 +64,19 @@ export default function EmbeddingPlayground() {
   const [loadingModels, setLoadingModels] = useState(true)
   const { toast } = useToast()
 
+  // Get display name for provider
+  const getProviderDisplayName = (provider: string | undefined): string => {
+    if (!provider) return ''
+    const displayNames: Record<string, string> = {
+      'privatemode': 'PrivateMode',
+      'redpill': 'RedPill',
+      'openai': 'OpenAI',
+      'anthropic': 'Anthropic',
+      'google': 'Google',
+    }
+    return displayNames[provider.toLowerCase()] || provider
+  }
+
   // Fetch available embedding models
   useEffect(() => {
     const fetchModels = async () => {
@@ -259,12 +272,17 @@ export default function EmbeddingPlayground() {
                   ) : (
                     embeddingModels.map((embModel) => (
                       <SelectItem key={embModel.id} value={embModel.id}>
-                        {embModel.id}
-                        {embModel.owned_by && embModel.owned_by !== 'unknown' && (
-                          <span className="text-muted-foreground ml-2">
-                            ({embModel.owned_by})
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <span>{embModel.id}</span>
+                          {(embModel.provider || embModel.owned_by) && (
+                            <Badge variant="outline" className="text-xs">
+                              {getProviderDisplayName(embModel.provider || embModel.owned_by)}
+                            </Badge>
+                          )}
+                          <Badge className="text-xs border-0 bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300">
+                            embed
+                          </Badge>
+                        </div>
                       </SelectItem>
                     ))
                   )}
