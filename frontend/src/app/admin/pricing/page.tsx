@@ -54,6 +54,7 @@ interface PricingResponse {
   output_price_per_million_cents: number;
   input_price_per_million_dollars: number;
   output_price_per_million_dollars: number;
+  currency: string;
   price_source: string;
   is_override: boolean;
   override_reason: string | null;
@@ -66,6 +67,21 @@ interface PricingResponse {
   is_current: boolean;
   created_at: string;
   updated_at: string;
+}
+
+interface ProviderMetadata {
+  id: string;
+  display_name: string;
+  currency: string;
+  currency_symbol: string;
+  supports_api_sync: boolean;
+  description: string;
+  website: string | null;
+}
+
+interface ProviderListResponse {
+  providers: ProviderMetadata[];
+  total: number;
 }
 
 interface PricingListResponse {
@@ -83,6 +99,12 @@ interface PricingSummary {
   last_sync_at: string | null;
 }
 
+interface LLMModel {
+  id: string;
+  provider: string;
+  name?: string;
+}
+
 interface PricingHistoryResponse {
   id: number;
   provider_id: string;
@@ -90,6 +112,7 @@ interface PricingHistoryResponse {
   model_name: string | null;
   input_price_per_million_cents: number;
   output_price_per_million_cents: number;
+  currency: string;
   price_source: string;
   is_override: boolean;
   override_reason: string | null;
@@ -145,6 +168,8 @@ export default function AdminPricingPage() {
   const [pricingData, setPricingData] = useState<PricingListResponse | null>(null);
   const [summary, setSummary] = useState<PricingSummary | null>(null);
   const [syncableProviders, setSyncableProviders] = useState<string[]>([]);
+  const [availableProviders, setAvailableProviders] = useState<ProviderMetadata[]>([]);
+  const [availableLLMModels, setAvailableLLMModels] = useState<LLMModel[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PricingResponse[]>([]);
@@ -163,23 +188,36 @@ export default function AdminPricingPage() {
   const [auditLog, setAuditLog] = useState<PricingAuditLogResponse[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
-  // Set pricing form
+  // Set pricing form - prices stored in full currency units (e.g., 5.00 EUR, not cents)
   const [setPricingForm, setSetPricingForm] = useState({
     provider_id: "",
     model_id: "",
-    input_price_per_million_cents: "",
-    output_price_per_million_cents: "",
+    custom_model_id: "",
+    use_custom_model: false,
+    input_price: "",  // Full currency units (e.g., 5.00 for 5 EUR)
+    output_price: "", // Full currency units (e.g., 5.00 for 5 EUR)
     reason: "",
   });
   const [setPricingLoading, setSetPricingLoading] = useState(false);
 
-  // Get models for selected provider in set pricing form
+  // Get the selected provider's metadata
+  const selectedProviderMeta = availableProviders.find(
+    p => p.id === setPricingForm.provider_id
+  );
+
+  // Get models for selected provider from LLM models list (primary source)
+  // Also include models from pricing data as fallback
   const modelsForSelectedProvider = setPricingForm.provider_id
-    ? [...new Set(
-        (pricingData?.pricing || [])
+    ? [...new Set([
+        // Models from LLM service (live available models)
+        ...availableLLMModels
+          .filter(m => m.provider === setPricingForm.provider_id)
+          .map(m => m.id),
+        // Models from existing pricing data (may include historical models)
+        ...(pricingData?.pricing || [])
           .filter(p => p.provider_id === setPricingForm.provider_id)
           .map(p => p.model_id)
-      )].sort()
+      ])].sort()
     : [];
 
   useEffect(() => {
@@ -191,15 +229,19 @@ export default function AdminPricingPage() {
       setLoading(true);
       setError(null);
 
-      const [pricingRes, summaryRes, syncableRes] = await Promise.all([
+      const [pricingRes, summaryRes, syncableRes, providersRes, modelsRes] = await Promise.all([
         apiClient.get<PricingListResponse>("/api-internal/v1/admin/pricing/all"),
         apiClient.get<PricingSummary>("/api-internal/v1/admin/pricing/summary"),
         apiClient.get<string[]>("/api-internal/v1/admin/pricing/syncable-providers"),
+        apiClient.get<ProviderListResponse>("/api-internal/v1/admin/pricing/available-providers"),
+        apiClient.get<{ data: LLMModel[] }>("/api-internal/v1/llm/models"),
       ]);
 
       setPricingData(pricingRes);
       setSummary(summaryRes);
       setSyncableProviders(syncableRes);
+      setAvailableProviders(providersRes.providers);
+      setAvailableLLMModels(modelsRes.data || []);
     } catch (err) {
       setError("Failed to load pricing data");
     } finally {
@@ -237,21 +279,71 @@ export default function AdminPricingPage() {
       setSetPricingLoading(true);
       setError(null);
 
-      await apiClient.post("/api-internal/v1/admin/pricing/set", {
-        provider_id: setPricingForm.provider_id,
-        model_id: setPricingForm.model_id,
-        model_name: null,
-        input_price_per_million_cents: parseInt(setPricingForm.input_price_per_million_cents),
-        output_price_per_million_cents: parseInt(setPricingForm.output_price_per_million_cents),
-        reason: setPricingForm.reason,
-      });
+      // Convert from full currency units to cents (multiply by 100)
+      const inputPriceCents = Math.round(parseFloat(setPricingForm.input_price) * 100);
+      const outputPriceCents = Math.round(parseFloat(setPricingForm.output_price) * 100);
+
+      // Handle "All Models" case - set pricing for all models of this provider
+      if (setPricingForm.model_id === "_all") {
+        const modelsToUpdate = modelsForSelectedProvider;
+        if (modelsToUpdate.length === 0) {
+          setError("No models found for this provider");
+          setSetPricingLoading(false);
+          return;
+        }
+
+        // Set pricing for each model sequentially
+        let successCount = 0;
+        let errorCount = 0;
+        for (const modelId of modelsToUpdate) {
+          try {
+            await apiClient.post("/api-internal/v1/admin/pricing/set", {
+              provider_id: setPricingForm.provider_id,
+              model_id: modelId,
+              model_name: null,
+              input_price_per_million_cents: inputPriceCents,
+              output_price_per_million_cents: outputPriceCents,
+              reason: setPricingForm.reason,
+            });
+            successCount++;
+          } catch {
+            errorCount++;
+          }
+        }
+
+        if (errorCount > 0) {
+          setError(`Set pricing for ${successCount} models, failed for ${errorCount} models`);
+        }
+      } else {
+        // Single model case
+        const modelId = setPricingForm.use_custom_model
+          ? setPricingForm.custom_model_id
+          : setPricingForm.model_id;
+
+        if (!modelId) {
+          setError("Please select or enter a model ID");
+          setSetPricingLoading(false);
+          return;
+        }
+
+        await apiClient.post("/api-internal/v1/admin/pricing/set", {
+          provider_id: setPricingForm.provider_id,
+          model_id: modelId,
+          model_name: null,
+          input_price_per_million_cents: inputPriceCents,
+          output_price_per_million_cents: outputPriceCents,
+          reason: setPricingForm.reason,
+        });
+      }
 
       // Reset form
       setSetPricingForm({
         provider_id: "",
         model_id: "",
-        input_price_per_million_cents: "",
-        output_price_per_million_cents: "",
+        custom_model_id: "",
+        use_custom_model: false,
+        input_price: "",
+        output_price: "",
         reason: "",
       });
 
@@ -329,13 +421,26 @@ export default function AdminPricingPage() {
     }
   };
 
-  const formatCurrency = (cents: number) => {
-    return new Intl.NumberFormat("en-US", {
+  const formatCurrency = (cents: number, currency: string = "USD") => {
+    const locale = currency === "EUR" ? "de-DE" : "en-US";
+    return new Intl.NumberFormat(locale, {
       style: "currency",
-      currency: "USD",
+      currency: currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 4,
     }).format(cents / 100);
+  };
+
+  // Helper to get currency for a provider
+  const getProviderCurrency = (providerId: string): string => {
+    const provider = availableProviders.find(p => p.id === providerId);
+    return provider?.currency || "USD";
+  };
+
+  // Helper to get currency symbol for a provider
+  const getProviderCurrencySymbol = (providerId: string): string => {
+    const provider = availableProviders.find(p => p.id === providerId);
+    return provider?.currency_symbol || "$";
   };
 
   const formatNumber = (value: number) => {
@@ -437,24 +542,64 @@ export default function AdminPricingPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {Object.entries(summary.models_by_provider).map(([provider, count]) => (
-                      <div key={provider} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="font-medium text-lg">{provider}</div>
-                          <Badge variant="outline">{count} models</Badge>
+                    {Object.entries(summary.models_by_provider).map(([provider, count]) => {
+                      const providerMeta = availableProviders.find(p => p.id === provider);
+                      return (
+                        <div key={provider} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <div>
+                              <div className="font-medium text-lg">
+                                {providerMeta?.display_name || provider}
+                              </div>
+                              {providerMeta && (
+                                <div className="text-xs text-muted-foreground">
+                                  {providerMeta.currency_symbol} {providerMeta.currency} • {providerMeta.description}
+                                </div>
+                              )}
+                            </div>
+                            <Badge variant="outline">{count} models</Badge>
+                          </div>
+                          {syncableProviders.includes(provider) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSync(provider)}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Sync
+                            </Button>
+                          )}
                         </div>
-                        {syncableProviders.includes(provider) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSync(provider)}
-                          >
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Sync
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
+                    {/* Show providers without pricing entries */}
+                    {availableProviders
+                      .filter(p => !Object.keys(summary.models_by_provider).includes(p.id))
+                      .map((provider) => (
+                        <div key={provider.id} className="flex items-center justify-between p-3 border rounded-lg border-dashed">
+                          <div className="flex items-center space-x-3">
+                            <div>
+                              <div className="font-medium text-lg text-muted-foreground">
+                                {provider.display_name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {provider.currency_symbol} {provider.currency} • {provider.description}
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-muted-foreground">No pricing set</Badge>
+                          </div>
+                          {syncableProviders.includes(provider.id) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSync(provider.id)}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Sync
+                            </Button>
+                          )}
+                        </div>
+                      ))}
                   </div>
                 </CardContent>
               </Card>
@@ -520,8 +665,8 @@ export default function AdminPricingPage() {
                   <TableRow>
                     <TableHead>Provider</TableHead>
                     <TableHead>Model</TableHead>
-                    <TableHead className="text-right">Input ($/M)</TableHead>
-                    <TableHead className="text-right">Output ($/M)</TableHead>
+                    <TableHead className="text-right">Input (/M)</TableHead>
+                    <TableHead className="text-right">Output (/M)</TableHead>
                     <TableHead>Source</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -532,6 +677,9 @@ export default function AdminPricingPage() {
                     <TableRow key={pricing.id}>
                       <TableCell>
                         <div className="font-medium">{pricing.provider_id}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {pricing.currency || getProviderCurrency(pricing.provider_id)}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="font-mono text-sm">{pricing.model_id}</div>
@@ -543,18 +691,18 @@ export default function AdminPricingPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="font-medium">
-                          {formatCurrency(pricing.input_price_per_million_cents)}
+                          {formatCurrency(pricing.input_price_per_million_cents, pricing.currency || getProviderCurrency(pricing.provider_id))}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {pricing.input_price_per_million_cents}¢
+                          {pricing.input_price_per_million_cents} cents
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="font-medium">
-                          {formatCurrency(pricing.output_price_per_million_cents)}
+                          {formatCurrency(pricing.output_price_per_million_cents, pricing.currency || getProviderCurrency(pricing.provider_id))}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {pricing.output_price_per_million_cents}¢
+                          {pricing.output_price_per_million_cents} cents
                         </div>
                       </TableCell>
                       <TableCell>{getPriceSourceBadge(pricing.price_source)}</TableCell>
@@ -604,6 +752,7 @@ export default function AdminPricingPage() {
               <CardTitle>Set Manual Pricing</CardTitle>
               <CardDescription>
                 Override or set custom pricing for a model. This will create a manual pricing entry.
+                Prices are stored in the provider&apos;s native currency (EUR for PrivateMode, USD for RedPill).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -613,73 +762,138 @@ export default function AdminPricingPage() {
                     <Label htmlFor="provider_id">Provider *</Label>
                     <Select
                       value={setPricingForm.provider_id}
-                      onValueChange={(value) => setSetPricingForm({ ...setPricingForm, provider_id: value, model_id: "" })}
+                      onValueChange={(value) => setSetPricingForm({
+                        ...setPricingForm,
+                        provider_id: value,
+                        model_id: "",
+                        custom_model_id: "",
+                        use_custom_model: false,
+                      })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select a provider" />
                       </SelectTrigger>
                       <SelectContent>
-                        {(pricingData?.providers || []).map((provider) => (
-                          <SelectItem key={provider} value={provider}>
-                            {provider}
+                        {availableProviders.map((provider) => (
+                          <SelectItem key={provider.id} value={provider.id}>
+                            <div className="flex items-center gap-2">
+                              <span>{provider.display_name}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {provider.currency_symbol} {provider.currency}
+                              </Badge>
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {selectedProviderMeta && (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedProviderMeta.description}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="model_id">Model *</Label>
-                    <Select
-                      value={setPricingForm.model_id}
-                      onValueChange={(value) => setSetPricingForm({ ...setPricingForm, model_id: value })}
-                      disabled={!setPricingForm.provider_id}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={setPricingForm.provider_id ? "Select a model" : "Select provider first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {modelsForSelectedProvider.map((model) => (
-                          <SelectItem key={model} value={model}>
-                            {model}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="model_id">Model *</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSetPricingForm({
+                          ...setPricingForm,
+                          use_custom_model: !setPricingForm.use_custom_model,
+                          model_id: "",
+                          custom_model_id: "",
+                        })}
+                        disabled={!setPricingForm.provider_id}
+                      >
+                        {setPricingForm.use_custom_model ? "Select Existing" : "Enter Custom"}
+                      </Button>
+                    </div>
+                    {setPricingForm.use_custom_model ? (
+                      <Input
+                        id="custom_model_id"
+                        type="text"
+                        value={setPricingForm.custom_model_id}
+                        onChange={(e) => setSetPricingForm({ ...setPricingForm, custom_model_id: e.target.value })}
+                        placeholder="e.g., meta-llama/llama-3.1-70b-instruct"
+                        disabled={!setPricingForm.provider_id}
+                        required
+                      />
+                    ) : (
+                      <Select
+                        value={setPricingForm.model_id}
+                        onValueChange={(value) => setSetPricingForm({ ...setPricingForm, model_id: value })}
+                        disabled={!setPricingForm.provider_id}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={setPricingForm.provider_id ? (modelsForSelectedProvider.length > 0 ? "Select a model" : "No models - use custom") : "Select provider first"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {modelsForSelectedProvider.length > 1 && (
+                            <SelectItem value="_all" className="font-semibold">
+                              All Models ({modelsForSelectedProvider.length})
+                            </SelectItem>
+                          )}
+                          {modelsForSelectedProvider.map((model) => (
+                            <SelectItem key={model} value={model}>
+                              {model}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {setPricingForm.model_id === "_all" && (
+                      <p className="text-xs text-blue-600">
+                        Pricing will be applied to all {modelsForSelectedProvider.length} models for this provider.
+                      </p>
+                    )}
+                    {setPricingForm.provider_id && modelsForSelectedProvider.length === 0 && !setPricingForm.use_custom_model && (
+                      <p className="text-xs text-muted-foreground">
+                        No existing models for this provider. Click &quot;Enter Custom&quot; to add a new model.
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="input_price">Input Price (cents per million tokens) *</Label>
+                    <Label htmlFor="input_price">
+                      Input Price ({selectedProviderMeta?.currency_symbol || "$"} per million tokens) *
+                    </Label>
                     <Input
                       id="input_price"
                       type="number"
                       min="0"
-                      value={setPricingForm.input_price_per_million_cents}
-                      onChange={(e) => setSetPricingForm({ ...setPricingForm, input_price_per_million_cents: e.target.value })}
-                      placeholder="40"
+                      step="0.01"
+                      value={setPricingForm.input_price}
+                      onChange={(e) => setSetPricingForm({ ...setPricingForm, input_price: e.target.value })}
+                      placeholder="5.00"
                       required
                     />
-                    {setPricingForm.input_price_per_million_cents && (
+                    {setPricingForm.input_price && selectedProviderMeta && (
                       <p className="text-sm text-muted-foreground">
-                        = {formatCurrency(parseInt(setPricingForm.input_price_per_million_cents))} per million tokens
+                        = {selectedProviderMeta.currency_symbol}{parseFloat(setPricingForm.input_price).toFixed(2)} {selectedProviderMeta.currency} per million tokens
                       </p>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="output_price">Output Price (cents per million tokens) *</Label>
+                    <Label htmlFor="output_price">
+                      Output Price ({selectedProviderMeta?.currency_symbol || "$"} per million tokens) *
+                    </Label>
                     <Input
                       id="output_price"
                       type="number"
                       min="0"
-                      value={setPricingForm.output_price_per_million_cents}
-                      onChange={(e) => setSetPricingForm({ ...setPricingForm, output_price_per_million_cents: e.target.value })}
-                      placeholder="40"
+                      step="0.01"
+                      value={setPricingForm.output_price}
+                      onChange={(e) => setSetPricingForm({ ...setPricingForm, output_price: e.target.value })}
+                      placeholder="5.00"
                       required
                     />
-                    {setPricingForm.output_price_per_million_cents && (
+                    {setPricingForm.output_price && selectedProviderMeta && (
                       <p className="text-sm text-muted-foreground">
-                        = {formatCurrency(parseInt(setPricingForm.output_price_per_million_cents))} per million tokens
+                        = {selectedProviderMeta.currency_symbol}{parseFloat(setPricingForm.output_price).toFixed(2)} {selectedProviderMeta.currency} per million tokens
                       </p>
                     )}
                   </div>
@@ -873,7 +1087,9 @@ export default function AdminPricingPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historyData.map((history) => (
+                  {historyData.map((history) => {
+                    const currency = history.currency || getProviderCurrency(history.provider_id);
+                    return (
                     <TableRow key={history.id}>
                       <TableCell className="text-sm">
                         {new Date(history.effective_from).toLocaleString()}
@@ -885,15 +1101,15 @@ export default function AdminPricingPage() {
                         }
                       </TableCell>
                       <TableCell className="text-right">
-                        <div>{formatCurrency(history.input_price_per_million_cents)}</div>
+                        <div>{formatCurrency(history.input_price_per_million_cents, currency)}</div>
                         <div className="text-xs text-muted-foreground">
-                          {history.input_price_per_million_cents}¢
+                          {history.input_price_per_million_cents} cents
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div>{formatCurrency(history.output_price_per_million_cents)}</div>
+                        <div>{formatCurrency(history.output_price_per_million_cents, currency)}</div>
                         <div className="text-xs text-muted-foreground">
-                          {history.output_price_per_million_cents}¢
+                          {history.output_price_per_million_cents} cents
                         </div>
                       </TableCell>
                       <TableCell>
@@ -912,7 +1128,8 @@ export default function AdminPricingPage() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

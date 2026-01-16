@@ -7,6 +7,23 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 
+interface ModelPricing {
+  input_per_million_cents: number;
+  output_per_million_cents: number;
+  source: string;
+}
+
+interface ProviderModel {
+  id: string;
+  capabilities: string[];
+  context_window: number | null;
+  max_output_tokens: number | null;
+  supports_streaming: boolean;
+  supports_function_calling: boolean;
+  tasks: string[] | null;
+  pricing: ModelPricing;
+}
+
 interface ProviderHealth {
   provider_id: string;
   display_name: string;
@@ -26,6 +43,7 @@ interface ProviderHealth {
     last_sync_at: string | null;
     model_count: number;
   } | null;
+  models: ProviderModel[];
 }
 
 export default function ProvidersTab() {
@@ -71,6 +89,29 @@ export default function ProvidersTab() {
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
+  }
+
+  // Get currency symbol based on provider ID
+  function getProviderCurrency(providerId: string): { symbol: string; code: string } {
+    // PrivateMode uses EUR, others use USD
+    if (providerId === 'privatemode') {
+      return { symbol: '€', code: 'EUR' };
+    }
+    return { symbol: '$', code: 'USD' };
+  }
+
+  function formatPricing(cents: number, providerId: string): string {
+    // Convert cents per million to currency units per million
+    const { symbol, code } = getProviderCurrency(providerId);
+    const amount = cents / 100;
+
+    // Format based on currency
+    if (code === 'EUR') {
+      // European format: €1,50
+      return `${symbol}${amount.toFixed(2).replace('.', ',')}`;
+    }
+    // US format: $1.50
+    return `${symbol}${amount.toFixed(2)}`;
   }
 
   if (loading) {
@@ -159,6 +200,53 @@ export default function ProvidersTab() {
                       Signer: {provider.attestation_details.signing_address.slice(0, 10)}...
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Available Models */}
+              {provider.models && provider.models.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Available Models ({provider.models.length})</h4>
+                  <div className="max-h-64 overflow-y-auto space-y-2">
+                    {provider.models.map((model) => (
+                      <div
+                        key={model.id}
+                        className="p-2 bg-muted/50 rounded-md text-sm"
+                      >
+                        <div className="font-mono text-xs break-all">{model.id}</div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {model.capabilities.map((cap) => (
+                            <Badge key={cap} variant="secondary" className="text-xs">
+                              {cap}
+                            </Badge>
+                          ))}
+                        </div>
+                        {model.pricing && (
+                          <div className="text-xs mt-1 flex items-center gap-2">
+                            <span className="text-green-600 dark:text-green-400 font-medium">
+                              In: {formatPricing(model.pricing.input_per_million_cents, provider.provider_id)}/M
+                            </span>
+                            <span className="text-orange-600 dark:text-orange-400 font-medium">
+                              Out: {formatPricing(model.pricing.output_per_million_cents, provider.provider_id)}/M
+                            </span>
+                            {model.pricing.source === 'default' && (
+                              <span className="text-muted-foreground">(default)</span>
+                            )}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-2">
+                          {model.context_window && (
+                            <span>Context: {model.context_window.toLocaleString()}</span>
+                          )}
+                          {model.max_output_tokens && (
+                            <span>Max output: {model.max_output_tokens.toLocaleString()}</span>
+                          )}
+                          {model.supports_streaming && <span>Streaming</span>}
+                          {model.supports_function_calling && <span>Function calling</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
