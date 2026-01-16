@@ -49,9 +49,10 @@ class ProviderPricing(Base):
     model_id = Column(String(255), nullable=False)  # Full model ID from provider
     model_name = Column(String(255), nullable=True)  # Human-readable name
 
-    # Pricing (in cents per 1M tokens)
+    # Pricing (in cents per 1M tokens, in native currency)
     input_price_per_million_cents = Column(BigInteger, nullable=False)
     output_price_per_million_cents = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False, default="USD")  # ISO 4217 currency code
 
     # Source tracking
     price_source = Column(String(20), nullable=False)  # 'api_sync', 'manual', 'default'
@@ -102,6 +103,7 @@ class ProviderPricing(Base):
             "output_price_per_million_cents": self.output_price_per_million_cents,
             "input_price_per_million_dollars": self.input_price_per_million_cents / 100.0,
             "output_price_per_million_dollars": self.output_price_per_million_cents / 100.0,
+            "currency": self.currency or "USD",
             "price_source": self.price_source,
             "is_override": self.is_override,
             "override_reason": self.override_reason,
@@ -172,6 +174,7 @@ class ProviderPricing(Base):
         context_length: Optional[int] = None,
         architecture: Optional[Dict[str, Any]] = None,
         quantization: Optional[str] = None,
+        currency: str = "USD",
     ) -> "ProviderPricing":
         """Create a new pricing record from API sync"""
         return cls(
@@ -180,6 +183,7 @@ class ProviderPricing(Base):
             model_name=model_name,
             input_price_per_million_cents=input_price_cents,
             output_price_per_million_cents=output_price_cents,
+            currency=currency,
             price_source="api_sync",
             source_api_response=api_response,
             is_override=False,
@@ -199,6 +203,7 @@ class ProviderPricing(Base):
         reason: str,
         user_id: int,
         model_name: Optional[str] = None,
+        currency: str = "USD",
     ) -> "ProviderPricing":
         """Create a new manual pricing override"""
         return cls(
@@ -207,6 +212,7 @@ class ProviderPricing(Base):
             model_name=model_name,
             input_price_per_million_cents=input_price_cents,
             output_price_per_million_cents=output_price_cents,
+            currency=currency,
             price_source="manual",
             is_override=True,
             override_reason=reason,

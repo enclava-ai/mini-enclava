@@ -19,6 +19,7 @@ from app.core.logging import get_logger
 from app.models.provider_pricing import ProviderPricing, PricingAuditLog
 from app.services.metrics import get_metrics_service
 from app.services.alerts import get_alert_service
+from app.services.provider_registry import get_provider_currency
 
 logger = get_logger(__name__)
 
@@ -357,6 +358,9 @@ class ProviderPricingSyncService:
         result = await self.db.execute(stmt)
         existing_pricing = result.scalar_one_or_none()
 
+        # Get the native currency for this provider
+        currency = get_provider_currency(provider_id)
+
         # Determine action and create records
         if existing_pricing is None:
             # Create new pricing record
@@ -373,6 +377,7 @@ class ProviderPricingSyncService:
                 api_response=model_data,
                 context_length=model_data.get("context_length"),
                 architecture=model_data.get("architecture"),
+                currency=currency,
             )
             self.db.add(new_pricing)
 
@@ -425,6 +430,7 @@ class ProviderPricingSyncService:
                 api_response=model_data,
                 context_length=model_data.get("context_length"),
                 architecture=model_data.get("architecture"),
+                currency=currency,
             )
             self.db.add(new_pricing)
 

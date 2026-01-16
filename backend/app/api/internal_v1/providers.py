@@ -8,9 +8,11 @@ These endpoints require admin privileges.
 from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.core.security import RequiresRole
+from app.db.database import get_db
 
 logger = get_logger(__name__)
 
@@ -22,7 +24,8 @@ require_admin = RequiresRole("admin")
 
 @router.get("/health")
 async def get_providers_health(
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
 ) -> List[Dict[str, Any]]:
     """
     Get health status of all inference providers.
@@ -39,8 +42,8 @@ async def get_providers_health(
         # Import here to avoid circular dependency
         from app.services.llm import llm_service
 
-        # Get health status from LLM service
-        providers_health = await llm_service.get_providers_health()
+        # Get health status from LLM service (with db session for pricing lookup)
+        providers_health = await llm_service.get_providers_health(db)
 
         return providers_health
 

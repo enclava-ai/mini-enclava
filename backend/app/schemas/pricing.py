@@ -66,6 +66,7 @@ class PricingResponse(BaseModel):
     output_price_per_million_cents: int
     input_price_per_million_dollars: float
     output_price_per_million_dollars: float
+    currency: str = Field(default="USD", description="ISO 4217 currency code (USD, EUR)")
     price_source: str
     is_override: bool
     override_reason: Optional[str]
@@ -92,6 +93,7 @@ class PricingHistoryResponse(BaseModel):
     model_name: Optional[str]
     input_price_per_million_cents: int
     output_price_per_million_cents: int
+    currency: str = Field(default="USD", description="ISO 4217 currency code (USD, EUR)")
     price_source: str
     is_override: bool
     override_reason: Optional[str]
@@ -230,3 +232,35 @@ class BulkPricingResponse(BaseModel):
     error_count: int
     results: List[Dict[str, Any]]
     errors: List[Dict[str, Any]]
+
+
+class ProviderMetadataResponse(BaseModel):
+    """Response schema for provider metadata"""
+
+    id: str = Field(..., description="Provider identifier")
+    display_name: str = Field(..., description="Human-readable provider name")
+    currency: str = Field(..., description="Native currency code (ISO 4217: USD, EUR)")
+    currency_symbol: str = Field(..., description="Currency symbol ($, €)")
+    supports_api_sync: bool = Field(..., description="Whether pricing can be synced from API")
+    description: str = Field(..., description="Brief description of the provider")
+    website: Optional[str] = Field(None, description="Provider website URL")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "privatemode",
+                "display_name": "PrivateMode.ai",
+                "currency": "EUR",
+                "currency_symbol": "€",
+                "supports_api_sync": False,
+                "description": "Confidential AI inference with TEE protection",
+                "website": "https://privatemode.ai"
+            }
+        }
+
+
+class ProviderListResponse(BaseModel):
+    """Response schema for listing all providers"""
+
+    providers: List[ProviderMetadataResponse]
+    total: int

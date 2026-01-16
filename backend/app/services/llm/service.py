@@ -8,7 +8,10 @@ Replaces LiteLLM client functionality with direct provider integration.
 import asyncio
 import logging
 import time
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Dict, Any, Optional, List, AsyncGenerator, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
 from .models import (
@@ -484,14 +487,46 @@ class LLMService:
 
         raise ProviderError(f"No provider found for model '{model}'", provider="none")
 
-    async def get_providers_health(self) -> List[Dict[str, Any]]:
-        """Get health status of all providers with attestation details."""
+    async def get_providers_health(self, db: Optional["AsyncSession"] = None) -> List[Dict[str, Any]]:
+        """Get health status of all providers with attestation details and models.
+
+        Args:
+            db: Optional database session for pricing lookup. If provided, pricing will
+                be fetched from the database first, with fallback to static pricing.
+        """
         # Import here to avoid circular dependency
         from .attestation.scheduler import attestation_scheduler
+        from app.services.pricing import PricingService
+
+        pricing_service = PricingService(db)
 
         result = []
         for provider_id, provider in self._providers.items():
             health = attestation_scheduler.get_health(provider_id)
+
+            # Fetch models for this provider
+            models_list = []
+            try:
+                provider_models = await provider.get_models()
+                for model in provider_models:
+                    # Get pricing for this model (from database if available, else static fallback)
+                    pricing = await pricing_service.get_pricing(provider_id, model.id)
+                    models_list.append({
+                        "id": model.id,
+                        "capabilities": model.capabilities,
+                        "context_window": model.context_window,
+                        "max_output_tokens": model.max_output_tokens,
+                        "supports_streaming": model.supports_streaming,
+                        "supports_function_calling": model.supports_function_calling,
+                        "tasks": model.tasks,
+                        "pricing": {
+                            "input_per_million_cents": pricing.input_price_per_million_cents,
+                            "output_per_million_cents": pricing.output_price_per_million_cents,
+                            "source": pricing.price_source,
+                        },
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to fetch models for {provider_id}: {e}")
 
             provider_health = {
                 "provider_id": provider_id,
@@ -501,6 +536,7 @@ class LLMService:
                 "last_healthy_at": health.last_healthy_at.isoformat() if health and health.last_healthy_at else None,
                 "error": health.error if health else None,
                 "attestation_details": self._get_attestation_details(health) if health else None,
+                "models": models_list,
             }
 
             result.append(provider_health)

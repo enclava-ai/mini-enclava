@@ -24,9 +24,16 @@ from app.schemas.pricing import (
     PricingListResponse,
     RemoveOverrideResponse,
     PricingSummary,
+    ProviderMetadataResponse,
+    ProviderListResponse,
 )
 from app.services.pricing_management import PricingManagementService
 from app.services.provider_pricing_sync import ProviderPricingSyncService
+from app.services.provider_registry import (
+    get_all_providers,
+    get_provider_currency,
+    get_currency_symbol,
+)
 
 logger = get_logger(__name__)
 
@@ -39,6 +46,8 @@ require_admin = RequiresRole("admin")
 
 def _pricing_to_response(pricing) -> PricingResponse:
     """Convert ProviderPricing model to response schema"""
+    # Get currency from pricing record, or fall back to provider default
+    currency = getattr(pricing, 'currency', None) or get_provider_currency(pricing.provider_id)
     return PricingResponse(
         id=pricing.id,
         provider_id=pricing.provider_id,
@@ -48,6 +57,7 @@ def _pricing_to_response(pricing) -> PricingResponse:
         output_price_per_million_cents=pricing.output_price_per_million_cents,
         input_price_per_million_dollars=pricing.input_price_per_million_cents / 100.0,
         output_price_per_million_dollars=pricing.output_price_per_million_cents / 100.0,
+        currency=currency,
         price_source=pricing.price_source,
         is_override=pricing.is_override,
         override_reason=pricing.override_reason,
@@ -65,6 +75,7 @@ def _pricing_to_response(pricing) -> PricingResponse:
 
 def _history_to_response(pricing) -> PricingHistoryResponse:
     """Convert ProviderPricing model to history response schema"""
+    currency = getattr(pricing, 'currency', None) or get_provider_currency(pricing.provider_id)
     return PricingHistoryResponse(
         id=pricing.id,
         provider_id=pricing.provider_id,
@@ -72,6 +83,7 @@ def _history_to_response(pricing) -> PricingHistoryResponse:
         model_name=pricing.model_name,
         input_price_per_million_cents=pricing.input_price_per_million_cents,
         output_price_per_million_cents=pricing.output_price_per_million_cents,
+        currency=currency,
         price_source=pricing.price_source,
         is_override=pricing.is_override,
         override_reason=pricing.override_reason,
@@ -435,3 +447,38 @@ async def get_syncable_providers(
     Requires admin role.
     """
     return ProviderPricingSyncService.get_syncable_providers()
+
+
+@router.get("/pricing/available-providers", response_model=ProviderListResponse)
+async def get_available_providers(
+    current_user: dict = Depends(require_admin),
+) -> ProviderListResponse:
+    """
+    Get all available providers with their metadata.
+
+    Returns provider information including:
+    - Native currency (EUR for PrivateMode, USD for RedPill)
+    - Whether the provider supports API sync
+    - Display name and description
+
+    Requires admin role.
+    """
+    providers = get_all_providers()
+
+    provider_responses = [
+        ProviderMetadataResponse(
+            id=p.id,
+            display_name=p.display_name,
+            currency=p.currency,
+            currency_symbol=get_currency_symbol(p.currency),
+            supports_api_sync=p.supports_api_sync,
+            description=p.description,
+            website=p.website,
+        )
+        for p in providers
+    ]
+
+    return ProviderListResponse(
+        providers=provider_responses,
+        total=len(provider_responses),
+    )

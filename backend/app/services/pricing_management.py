@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.models.provider_pricing import ProviderPricing, PricingAuditLog
+from app.services.provider_registry import get_provider_currency
 
 logger = get_logger(__name__)
 
@@ -84,6 +85,9 @@ class PricingManagementService:
             if not model_name:
                 model_name = existing_pricing.model_name
 
+        # Get the native currency for this provider
+        currency = get_provider_currency(provider_id)
+
         # Create new manual pricing record
         new_pricing = ProviderPricing.create_manual(
             provider_id=provider_id,
@@ -93,6 +97,7 @@ class PricingManagementService:
             reason=reason,
             user_id=user_id,
             model_name=model_name,
+            currency=currency,
         )
         self.db.add(new_pricing)
 

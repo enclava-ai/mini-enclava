@@ -38,7 +38,7 @@ class UsageRecordingService:
             db: AsyncSession for database operations
         """
         self.db = db
-        self.pricing_service = PricingService()
+        self.pricing_service = PricingService(db)
 
     async def record_request(
         self,

@@ -133,10 +133,11 @@ class UsageStatsService:
         # Source filter
         if source_filter == "api_key":
             conditions.append(UsageRecord.api_key_id.is_not(None))
-            conditions.append(UsageRecord.api_key_id != 0)
         elif source_filter == "playground":
-            conditions.append(UsageRecord.api_key_id == 0)
+            conditions.append(UsageRecord.api_key_id.is_(None))
+            conditions.append(UsageRecord.chatbot_id.is_(None))
         elif source_filter == "chatbot":
+            conditions.append(UsageRecord.api_key_id.is_(None))
             conditions.append(UsageRecord.chatbot_id.is_not(None))
 
         # Get total count
