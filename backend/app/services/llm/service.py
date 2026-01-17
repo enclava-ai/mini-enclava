@@ -13,6 +13,8 @@ from typing import Dict, Any, Optional, List, AsyncGenerator, TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
+from uuid import uuid4, UUID
+from sqlalchemy import select
 
 from .models import (
     ChatRequest,
@@ -27,6 +29,9 @@ from .config import config_manager, ProviderConfig
 from ...core.config import settings
 
 from .resilience import ResilienceManagerFactory
+from ..usage_recording import UsageRecordingService
+from .streaming_tracker import StreamingTokenTracker, StreamingUsageRecorder
+from ...models.chatbot import ChatbotInstance
 
 # from .metrics import metrics_collector
 from .providers import BaseLLMProvider, PrivateModeProvider
@@ -224,8 +229,14 @@ class LLMService:
             except Exception as e:
                 logger.error(f"Initial attestation verification failed for {provider_id}: {e}")
 
-    async def create_chat_completion(self, request: ChatRequest) -> ChatResponse:
-        """Create chat completion with security and resilience"""
+    async def create_chat_completion(
+        self, 
+        request: ChatRequest,
+        db: Optional["AsyncSession"] = None, 
+        user_id: Optional[str] = None, 
+        api_key_id: Optional[int] = None
+    ) -> ChatResponse:
+        """Create chat completion with security, resilience, and usage recording"""
         if not self._initialized:
             await self.initialize()
 
@@ -233,22 +244,49 @@ class LLMService:
         if not request.messages:
             raise ValidationError("Messages cannot be empty", field="messages")
 
-        risk_score = 0.0
+        request_id = uuid4()
+        start_time = time.time()
+        
+        # Initialize usage service if DB session provided
+        usage_service = UsageRecordingService(db) if db else None
 
-        # Get provider for model
-        provider_name = self._get_provider_for_model(request.model)
+        # Get provider for model (with chatbot preference check)
+        provider_name = await self._get_provider_for_model(
+            request.model, 
+            chatbot_id=request.chatbot_id,
+            db=db
+        )
         provider = self._providers.get(provider_name)
 
         if not provider:
-            raise ProviderError(
+            error = ProviderError(
                 f"No available provider for model '{request.model}'",
                 provider=provider_name,
             )
+            if usage_service:
+                latency_ms = int((time.time() - start_time) * 1000)
+                await usage_service.record_request(
+                    request_id=request_id,
+                    user_id=user_id,
+                    api_key_id=api_key_id,
+                    provider_id="none",
+                    provider_model=request.model,
+                    input_tokens=0,
+                    output_tokens=0,
+                    endpoint="/v1/chat/completions",
+                    status="error",
+                    error_type="provider_unavailable",
+                    error_message=str(error),
+                    latency_ms=latency_ms,
+                    chatbot_id=request.chatbot_id,
+                    message_count=len(request.messages),
+                )
+                await db.commit()
+            raise error
 
         # Execute with resilience
         resilience_manager = ResilienceManagerFactory.get_manager(provider_name)
-        start_time = time.time()
-
+        
         try:
             response = await resilience_manager.execute(
                 provider.create_chat_completion,
@@ -257,37 +295,98 @@ class LLMService:
                 non_retryable_exceptions=(ValidationError,),
             )
 
-            # Record successful request - metrics disabled
-            total_latency = (time.time() - start_time) * 1000
+            # Record successful request
+            if usage_service:
+                latency_ms = int((time.time() - start_time) * 1000)
+                
+                # Extract token usage
+                input_tokens = 0
+                output_tokens = 0
+                if response.usage:
+                    input_tokens = response.usage.prompt_tokens
+                    output_tokens = response.usage.completion_tokens
+
+                await usage_service.record_request(
+                    request_id=request_id,
+                    user_id=user_id,
+                    api_key_id=api_key_id,
+                    provider_id=provider_name,
+                    provider_model=request.model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    endpoint="/v1/chat/completions",
+                    status="success",
+                    latency_ms=latency_ms,
+                    chatbot_id=request.chatbot_id,
+                    message_count=len(request.messages),
+                    is_streaming=False,
+                )
+                await db.commit()
 
             return response
 
         except Exception as e:
-            # Record failed request - metrics disabled
-            total_latency = (time.time() - start_time) * 1000
+            # Record failed request
+            latency_ms = int((time.time() - start_time) * 1000)
             error_code = getattr(e, "error_code", e.__class__.__name__)
 
             logger.exception(
                 "Chat completion failed for provider %s (model=%s, latency=%.2fms, error=%s)",
                 provider_name,
                 request.model,
-                total_latency,
+                latency_ms,
                 error_code,
             )
+            
+            if usage_service:
+                # Try to determine error type
+                error_type = "provider_error"
+                if isinstance(e, ValidationError):
+                    error_type = "validation_error"
+                elif isinstance(e, SecurityError):
+                    error_type = "security_error"
+                elif isinstance(e, TimeoutError):
+                    error_type = "timeout"
+                
+                await usage_service.record_request(
+                    request_id=request_id,
+                    user_id=user_id,
+                    api_key_id=api_key_id,
+                    provider_id=provider_name,
+                    provider_model=request.model,
+                    input_tokens=0,
+                    output_tokens=0,
+                    endpoint="/v1/chat/completions",
+                    status="error",
+                    error_type=error_type,
+                    error_message=str(e),
+                    latency_ms=latency_ms,
+                    chatbot_id=request.chatbot_id,
+                    message_count=len(request.messages),
+                )
+                await db.commit()
+                
             raise
 
     async def create_chat_completion_stream(
-        self, request: ChatRequest
+        self, 
+        request: ChatRequest,
+        db: Optional["AsyncSession"] = None,
+        user_id: Optional[str] = None,
+        api_key_id: Optional[int] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Create streaming chat completion"""
+        """Create streaming chat completion with usage tracking"""
         if not self._initialized:
             await self.initialize()
 
-        # Security validation disabled - always allow streaming requests
-        risk_score = 0.0
-
+        request_id = uuid4()
+        
         # Get provider
-        provider_name = self._get_provider_for_model(request.model)
+        provider_name = await self._get_provider_for_model(
+            request.model,
+            chatbot_id=request.chatbot_id,
+            db=db
+        )
         provider = self._providers.get(provider_name)
 
         if not provider:
@@ -298,18 +397,58 @@ class LLMService:
 
         # Execute streaming with resilience
         resilience_manager = ResilienceManagerFactory.get_manager(provider_name)
+        
+        # Setup streaming tracker if DB session is available
+        tracker = StreamingTokenTracker(request.model)
+        recorder = None
+        
+        if db:
+            recorder = StreamingUsageRecorder(
+                tracker=tracker,
+                request_id=request_id,
+                user_id=user_id,
+                api_key_id=api_key_id,
+                provider_id=provider_name,
+                endpoint="/v1/chat/completions",
+            )
 
         try:
+            # We need to manually handle the recording since we're yielding
             async for chunk in await resilience_manager.execute(
                 provider.create_chat_completion_stream,
                 request,
                 retryable_exceptions=(ProviderError, TimeoutError),
                 non_retryable_exceptions=(ValidationError,),
             ):
+                if recorder:
+                    recorder.process_chunk(chunk)
                 yield chunk
+                
+            # After stream completes, save the record
+            if recorder and db:
+                usage = recorder.get_final_usage()
+                usage_service = UsageRecordingService(db)
+                
+                await usage_service.record_request(
+                    request_id=request_id,
+                    user_id=recorder.user_id,
+                    api_key_id=recorder.api_key_id,
+                    provider_id=recorder.provider_id,
+                    provider_model=request.model,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    endpoint=recorder.endpoint,
+                    status="success",
+                    latency_ms=usage.total_duration_ms,
+                    ttft_ms=usage.ttft_ms,
+                    chatbot_id=request.chatbot_id,
+                    message_count=len(request.messages),
+                    is_streaming=True,
+                )
+                await db.commit()
 
         except Exception as e:
-            # Record streaming failure - metrics disabled
+            # Record streaming failure
             error_code = getattr(e, "error_code", e.__class__.__name__)
             logger.exception(
                 "Streaming chat completion failed for provider %s (model=%s, error=%s)",
@@ -317,29 +456,78 @@ class LLMService:
                 request.model,
                 error_code,
             )
+            
+            if recorder and db:
+                usage = recorder.get_final_usage()
+                usage_service = UsageRecordingService(db)
+                
+                await usage_service.record_request(
+                    request_id=request_id,
+                    user_id=recorder.user_id,
+                    api_key_id=recorder.api_key_id,
+                    provider_id=recorder.provider_id,
+                    provider_model=request.model,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    endpoint=recorder.endpoint,
+                    status="error",
+                    error_type="stream_error",
+                    error_message=str(e),
+                    latency_ms=usage.total_duration_ms,
+                    chatbot_id=request.chatbot_id,
+                    message_count=len(request.messages),
+                    is_streaming=True,
+                )
+                await db.commit()
             raise
 
-    async def create_embedding(self, request: EmbeddingRequest) -> EmbeddingResponse:
-        """Create embeddings with security and resilience"""
+    async def create_embedding(
+        self, 
+        request: EmbeddingRequest,
+        db: Optional["AsyncSession"] = None,
+        user_id: Optional[str] = None,
+        api_key_id: Optional[int] = None
+    ) -> EmbeddingResponse:
+        """Create embeddings with security, resilience and usage recording"""
         if not self._initialized:
             await self.initialize()
 
-        # Security validation disabled - always allow embedding requests
-        risk_score = 0.0
+        request_id = uuid4()
+        start_time = time.time()
+        
+        # Initialize usage service if DB session provided
+        usage_service = UsageRecordingService(db) if db else None
 
         # Get provider
-        provider_name = self._get_provider_for_model(request.model)
+        provider_name = await self._get_provider_for_model(request.model)
         provider = self._providers.get(provider_name)
 
         if not provider:
-            raise ProviderError(
+            error = ProviderError(
                 f"No available provider for model '{request.model}'",
                 provider=provider_name,
             )
+            if usage_service:
+                latency_ms = int((time.time() - start_time) * 1000)
+                await usage_service.record_request(
+                    request_id=request_id,
+                    user_id=user_id,
+                    api_key_id=api_key_id,
+                    provider_id="none",
+                    provider_model=request.model,
+                    input_tokens=0,
+                    output_tokens=0,
+                    endpoint="/v1/embeddings",
+                    status="error",
+                    error_type="provider_unavailable",
+                    error_message=str(error),
+                    latency_ms=latency_ms,
+                )
+                await db.commit()
+            raise error
 
         # Execute with resilience
         resilience_manager = ResilienceManagerFactory.get_manager(provider_name)
-        start_time = time.time()
 
         try:
             response = await resilience_manager.execute(
@@ -349,22 +537,64 @@ class LLMService:
                 non_retryable_exceptions=(ValidationError,),
             )
 
-            # Record successful request - metrics disabled
-            total_latency = (time.time() - start_time) * 1000
+            # Record successful request
+            if usage_service:
+                latency_ms = int((time.time() - start_time) * 1000)
+                
+                # Extract token usage
+                input_tokens = 0
+                total_tokens = 0
+                if response.usage:
+                    input_tokens = response.usage.prompt_tokens
+                    total_tokens = response.usage.total_tokens
+
+                await usage_service.record_request(
+                    request_id=request_id,
+                    user_id=user_id,
+                    api_key_id=api_key_id,
+                    provider_id=provider_name,
+                    provider_model=request.model,
+                    input_tokens=input_tokens,
+                    output_tokens=0,  # Embeddings don't have output tokens
+                    endpoint="/v1/embeddings",
+                    status="success",
+                    latency_ms=latency_ms,
+                    is_streaming=False,
+                )
+                await db.commit()
 
             return response
 
         except Exception as e:
-            # Record failed request - metrics disabled
-            total_latency = (time.time() - start_time) * 1000
+            # Record failed request
+            latency_ms = int((time.time() - start_time) * 1000)
             error_code = getattr(e, "error_code", e.__class__.__name__)
+            
             logger.exception(
                 "Embedding request failed for provider %s (model=%s, latency=%.2fms, error=%s)",
                 provider_name,
                 request.model,
-                total_latency,
+                latency_ms,
                 error_code,
             )
+            
+            if usage_service:
+                await usage_service.record_request(
+                    request_id=request_id,
+                    user_id=user_id,
+                    api_key_id=api_key_id,
+                    provider_id=provider_name,
+                    provider_model=request.model,
+                    input_tokens=0,
+                    output_tokens=0,
+                    endpoint="/v1/embeddings",
+                    status="error",
+                    error_type="provider_error",
+                    error_message=str(e),
+                    latency_ms=latency_ms,
+                )
+                await db.commit()
+                
             raise
 
     async def get_models(self, provider_name: Optional[str] = None) -> List[ModelInfo]:
@@ -440,7 +670,7 @@ class LLMService:
             "resilience": resilience_health,
         }
 
-    def get_provider_for_model(self, model: str) -> str:
+    async def get_provider_for_model(self, model: str) -> str:
         """
         Get provider name for a model (public API).
 
@@ -450,38 +680,68 @@ class LLMService:
         Returns:
             Provider name string
         """
-        return self._get_provider_for_model(model)
+        return await self._get_provider_for_model(model)
 
-    def _get_provider_for_model(self, model: str) -> str:
-        """Get provider name for a model with health checks"""
+    async def _get_provider_for_model(
+        self, 
+        model: str, 
+        chatbot_id: Optional[str] = None,
+        db: Optional["AsyncSession"] = None
+    ) -> str:
+        """
+        Get provider name for a model with health checks and preference logic
+        """
         # Import here to avoid circular dependency
         from .attestation.scheduler import attestation_scheduler
 
-        # Check model routing first
+        # 1. Check Chatbot-specific preferences (if applicable)
+        if chatbot_id and db:
+            try:
+                # Query chatbot preferences
+                result = await db.execute(
+                    select(ChatbotInstance.preferred_provider_id, ChatbotInstance.allowed_providers)
+                    .where(ChatbotInstance.id == chatbot_id)
+                )
+                preference = result.first()
+                
+                if preference:
+                    preferred_id, allowed_ids = preference
+                    
+                    # If preferred provider is set and valid, check availability
+                    if preferred_id and preferred_id in self._providers:
+                        if attestation_scheduler.is_healthy(preferred_id):
+                            # Also check if model is supported if we're not just defaulting
+                            provider = self._providers[preferred_id]
+                            if provider.supports_model(model):
+                                return preferred_id
+            except Exception as e:
+                logger.warning(f"Error checking chatbot provider preferences: {e}")
+
+        # 2. Check model routing from config
         provider_name = config_manager.get_provider_for_model(model)
         if provider_name and provider_name in self._providers:
             # Verify provider is healthy
             if attestation_scheduler.is_healthy(provider_name):
                 return provider_name
 
-        # Fall back to healthy providers that support the model
+        # 3. Fall back to any healthy provider that supports the model
         for name, provider in self._providers.items():
             if provider.supports_model(model) and attestation_scheduler.is_healthy(name):
                 return name
 
-        # Use default provider as last resort (if healthy)
+        # 4. Use default provider as last resort (if healthy)
         config = config_manager.get_config()
         if config.default_provider in self._providers:
             if attestation_scheduler.is_healthy(config.default_provider):
                 return config.default_provider
 
-        # If no healthy providers, try any provider (degraded mode)
+        # 5. Degraded mode: If no healthy providers, try any provider that supports the model
         logger.warning(f"No healthy providers available for model '{model}', trying degraded mode")
         for name, provider in self._providers.items():
             if provider.supports_model(model):
                 return name
 
-        # If nothing else works, use first available provider
+        # 6. Absolute fallback: use first available provider
         if self._providers:
             return list(self._providers.keys())[0]
 

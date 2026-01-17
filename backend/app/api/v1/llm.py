@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -234,18 +235,12 @@ async def create_chat_completion(
     db: AsyncSession = Depends(get_db),
 ):
     """Create chat completion with budget enforcement"""
-    start_time = time.time()
     request_id = uuid4()
-    usage_service = UsageRecordingService(db)
-
-    # Extract client info for usage recording
-    client_ip = request_body.headers.get("x-forwarded-for", "").split(",")[0].strip() or \
-                request_body.headers.get("x-real-ip") or \
-                (request_body.client.host if request_body.client else None)
-    user_agent = request_body.headers.get("user-agent")
 
     try:
         auth_type = context.get("auth_type", "api_key")
+        user_id = str(context.get("user_id")) if context.get("user_id") else None
+        api_key_id = context.get("api_key_id")
 
         # Handle different authentication types
         if auth_type == "api_key":
@@ -275,8 +270,6 @@ async def create_chat_completion(
                     detail="API key information not available",
                 )
         elif auth_type == "jwt":
-            # For JWT authentication, we'll skip the detailed permission checks for now
-            # and create a dummy API key context for budget tracking
             user = context.get("user")
             if not user:
                 raise HTTPException(
@@ -298,7 +291,7 @@ async def create_chat_completion(
         else:
             estimated_tokens += 150  # Default response length estimate
 
-        # Simple budget check (only for API key users) - check if limit exceeded
+        # Simple budget check (only for API key users)
         warnings = []
         if auth_type == "api_key" and api_key:
             is_allowed, error_message, budget_warnings = await async_check_budget_for_request(
@@ -334,13 +327,32 @@ async def create_chat_completion(
             stop=chat_request.stop,
             stream=chat_request.stream or False,
             user_id=str(context.get("user_id", "anonymous")),
-            api_key_id=context.get("api_key_id", 0)
-            if auth_type == "api_key"
-            else 0,
+            api_key_id=api_key_id if auth_type == "api_key" else 0,
+            chatbot_id=getattr(chat_request, "chatbot_id", None) # Pass chatbot_id if available
         )
 
-        # Make request to LLM service
-        llm_response = await llm_service.create_chat_completion(llm_request)
+        # Handle streaming request
+        if chat_request.stream:
+            async def event_generator():
+                try:
+                    async for chunk in await llm_service.create_chat_completion_stream(
+                        llm_request, db, user_id, api_key_id
+                    ):
+                        yield f"data: {chunk}\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception as e:
+                    logger.error(f"Streaming error: {e}")
+                    yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+
+            return StreamingResponse(
+                event_generator(),
+                media_type="text/event-stream"
+            )
+
+        # Handle regular request
+        llm_response = await llm_service.create_chat_completion(
+            llm_request, db, user_id, api_key_id
+        )
 
         # Convert LLM service response to API format
         response = {
@@ -373,67 +385,38 @@ async def create_chat_completion(
             if llm_response.usage
             else {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         }
-
-        # Calculate actual cost and update usage
+        
+        # Calculate actual cost and update budget (if using API key)
+        # Note: Usage record is already saved by LLMService
         usage = response.get("usage", {})
-        input_tokens = usage.get("prompt_tokens", 0)
-        output_tokens = usage.get("completion_tokens", 0)
-        total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
-
-        # Calculate accurate cost
-        actual_cost_cents = CostCalculator.calculate_cost_cents(
-            chat_request.model, input_tokens, output_tokens
-        )
-
-        # Record usage to usage_records table (source of truth for billing)
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_request(
-            request_id=request_id,
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id") if auth_type == "api_key" else None,
-            provider_id=getattr(llm_response, "provider", "privatemode"),
-            provider_model=chat_request.model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            endpoint="/v1/chat/completions",
-            method="POST",
-            is_streaming=chat_request.stream or False,
-            message_count=len(chat_request.messages),
-            latency_ms=latency_ms,
-            status="success",
-            ip_address=client_ip,
-            user_agent=user_agent,
-        )
-
-        # Record actual usage in budgets (only for API key users)
-        if auth_type == "api_key" and api_key:
-            await async_record_request_usage(
-                db,
-                api_key,
-                chat_request.model,
-                input_tokens,
-                output_tokens,
-                "chat/completions",
+        total_tokens = usage.get("total_tokens", 0)
+        
+        if auth_type == "api_key" and api_key and total_tokens > 0:
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            
+            # Calculate accurate cost
+            actual_cost_cents = CostCalculator.calculate_cost_cents(
+                chat_request.model, input_tokens, output_tokens
             )
-
+            
             # Update API key usage statistics
             auth_service = APIKeyAuthService(db)
             await auth_service.update_usage_stats(
                 context, total_tokens, actual_cost_cents
             )
-
-        # Commit the usage record and budget updates
-        await db.commit()
-
-        # Set analytics data for middleware
-        set_analytics_data(
-            model=chat_request.model,
-            request_tokens=input_tokens,
-            response_tokens=output_tokens,
-            total_tokens=total_tokens,
-            cost_cents=actual_cost_cents,
-            budget_warnings=warnings,
-        )
+            
+            # Record actual usage in budgets
+            await async_record_request_usage( 
+                db, 
+                api_key, 
+                chat_request.model, 
+                input_tokens, 
+                output_tokens, 
+                "chat/completions",
+            )
+            
+            await db.commit()
 
         # Add budget warnings to response if any
         if warnings:
@@ -445,66 +428,19 @@ async def create_chat_completion(
         raise
     except SecurityError as e:
         logger.warning(f"Security error in chat completion: {e}")
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id="privatemode",
-            model=chat_request.model,
-            endpoint="/v1/chat/completions",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-            message_count=len(chat_request.messages),
-            is_streaming=chat_request.stream or False,
-        )
-        await db.commit()
+        # Usage recording handled by LLMService
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Security validation failed: {e.message}",
+            detail=f"Security validation failed: {str(e)}",
         )
     except ValidationError as e:
         logger.warning(f"Validation error in chat completion: {e}")
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id="privatemode",
-            model=chat_request.model,
-            endpoint="/v1/chat/completions",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-            message_count=len(chat_request.messages),
-            is_streaming=chat_request.stream or False,
-        )
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Request validation failed: {e.message}",
+            detail=f"Request validation failed: {str(e)}",
         )
     except ProviderError as e:
         logger.error(f"Provider error in chat completion: {e}")
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id="privatemode",
-            model=chat_request.model,
-            endpoint="/v1/chat/completions",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-            message_count=len(chat_request.messages),
-            is_streaming=chat_request.stream or False,
-        )
-        await db.commit()
         if "rate limit" in str(e).lower():
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -517,47 +453,12 @@ async def create_chat_completion(
             )
     except LLMError as e:
         logger.error(f"LLM service error in chat completion: {e}")
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id="privatemode",
-            model=chat_request.model,
-            endpoint="/v1/chat/completions",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-            message_count=len(chat_request.messages),
-            is_streaming=chat_request.stream or False,
-        )
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="LLM service error",
         )
     except Exception as e:
         logger.error(f"Unexpected error creating chat completion: {e}")
-        try:
-            latency_ms = int((time.time() - start_time) * 1000)
-            await usage_service.record_error(
-                user_id=context.get("user_id"),
-                api_key_id=context.get("api_key_id"),
-                provider_id="privatemode",
-                model=chat_request.model,
-                endpoint="/v1/chat/completions",
-                error=e,
-                latency_ms=latency_ms,
-                request_id=request_id,
-                ip_address=client_ip,
-                user_agent=user_agent,
-                message_count=len(chat_request.messages),
-                is_streaming=chat_request.stream or False,
-            )
-            await db.commit()
-        except Exception as record_error:
-            logger.error(f"Failed to record error usage: {record_error}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create chat completion",
@@ -572,17 +473,13 @@ async def create_embedding(
     db: AsyncSession = Depends(get_db),
 ):
     """Create embedding with budget enforcement"""
-    start_time = time.time()
     request_id = uuid4()
-    usage_service = UsageRecordingService(db)
-
-    # Extract client info for usage recording
-    client_ip = request_body.headers.get("x-forwarded-for", "").split(",")[0].strip() or \
-                request_body.headers.get("x-real-ip") or \
-                (request_body.client.host if request_body.client else None)
-    user_agent = request_body.headers.get("user-agent")
 
     try:
+        auth_type = context.get("auth_type", "api_key")
+        user_id = str(context.get("user_id")) if context.get("user_id") else None
+        api_key_id = context.get("api_key_id")
+
         auth_service = APIKeyAuthService(db)
 
         # Check permissions
@@ -624,12 +521,14 @@ async def create_embedding(
             model=request.model,
             input=request.input,
             encoding_format=request.encoding_format,
-            user_id=str(context["user_id"]),
-            api_key_id=context["api_key_id"],
+            user_id=str(context.get("user_id", "anonymous")),
+            api_key_id=api_key_id,
         )
 
         # Make request to LLM service
-        llm_response = await llm_service.create_embedding(llm_request)
+        llm_response = await llm_service.create_embedding(
+            llm_request, db, user_id, api_key_id
+        )
 
         # Convert LLM service response to API format
         response = {
@@ -658,46 +557,24 @@ async def create_embedding(
             },
         }
 
-        # Calculate actual cost and update usage
+        # Calculate actual cost and update budget (usage is recorded by service)
         usage = response.get("usage", {})
         total_tokens = usage.get("total_tokens", int(estimated_tokens))
-        prompt_tokens = usage.get("prompt_tokens", total_tokens)
-
+        
         # Calculate accurate cost (embeddings typically use input tokens only)
         actual_cost_cents = CostCalculator.calculate_cost_cents(
             request.model, total_tokens, 0
         )
-
-        # Record usage to usage_records table (source of truth for billing)
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_request(
-            request_id=request_id,
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id=getattr(llm_response, "provider", "privatemode"),
-            provider_model=request.model,
-            input_tokens=prompt_tokens,
-            output_tokens=0,  # Embeddings have no output tokens
-            endpoint="/v1/embeddings",
-            method="POST",
-            is_streaming=False,
-            latency_ms=latency_ms,
-            status="success",
-            ip_address=client_ip,
-            user_agent=user_agent,
-        )
-
-        # Record actual usage in budgets - fully async
+        
+        # Record actual usage in budgets and update key stats
         await async_record_request_usage(
             db, api_key, request.model, total_tokens, 0, "embeddings"
         )
 
-        # Update API key usage statistics
         await auth_service.update_usage_stats(
             context, total_tokens, actual_cost_cents
         )
 
-        # Commit the usage record and budget updates
         await db.commit()
 
         # Add budget warnings to response if any
@@ -710,60 +587,18 @@ async def create_embedding(
         raise
     except SecurityError as e:
         logger.warning(f"Security error in embedding: {e}")
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id="privatemode",
-            model=request.model,
-            endpoint="/v1/embeddings",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-        )
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Security validation failed: {e.message}",
+            detail=f"Security validation failed: {str(e)}",
         )
     except ValidationError as e:
         logger.warning(f"Validation error in embedding: {e}")
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id="privatemode",
-            model=request.model,
-            endpoint="/v1/embeddings",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-        )
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Request validation failed: {e.message}",
+            detail=f"Request validation failed: {str(e)}",
         )
     except ProviderError as e:
         logger.error(f"Provider error in embedding: {e}")
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id="privatemode",
-            model=request.model,
-            endpoint="/v1/embeddings",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-        )
-        await db.commit()
         if "rate limit" in str(e).lower():
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -776,43 +611,12 @@ async def create_embedding(
             )
     except LLMError as e:
         logger.error(f"LLM service error in embedding: {e}")
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=context.get("user_id"),
-            api_key_id=context.get("api_key_id"),
-            provider_id="privatemode",
-            model=request.model,
-            endpoint="/v1/embeddings",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-        )
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="LLM service error",
         )
     except Exception as e:
         logger.error(f"Unexpected error creating embedding: {e}")
-        try:
-            latency_ms = int((time.time() - start_time) * 1000)
-            await usage_service.record_error(
-                user_id=context.get("user_id"),
-                api_key_id=context.get("api_key_id"),
-                provider_id="privatemode",
-                model=request.model,
-                endpoint="/v1/embeddings",
-                error=e,
-                latency_ms=latency_ms,
-                request_id=request_id,
-                ip_address=client_ip,
-                user_agent=user_agent,
-            )
-            await db.commit()
-        except Exception as record_error:
-            logger.error(f"Failed to record error usage: {record_error}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create embedding",

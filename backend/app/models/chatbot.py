@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     JSON,
     ForeignKey,
+    ARRAY,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -36,6 +37,10 @@ class ChatbotInstance(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+
+    # Provider Preferences (Added in migration 022)
+    preferred_provider_id = Column(String(50), nullable=True)
+    allowed_providers = Column(ARRAY(String(50)), nullable=True)
 
     # Relationships
     conversations = relationship(
