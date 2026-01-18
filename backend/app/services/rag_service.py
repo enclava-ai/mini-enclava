@@ -621,8 +621,8 @@ class RAGService:
             from app.core.config import settings
 
             client = QdrantClient(
-                host=getattr(settings, "QDRANT_HOST", "localhost"),
-                port=getattr(settings, "QDRANT_PORT", 6333),
+                host=settings.QDRANT_HOST,
+                port=settings.QDRANT_PORT,
                 timeout=30,
             )
 
@@ -683,8 +683,8 @@ class RAGService:
             from app.core.config import settings
 
             client = QdrantClient(
-                host=getattr(settings, "QDRANT_HOST", "localhost"),
-                port=getattr(settings, "QDRANT_PORT", 6333),
+                host=settings.QDRANT_HOST,
+                port=settings.QDRANT_PORT,
                 timeout=30,
             )
 
@@ -720,8 +720,8 @@ class RAGService:
             from app.core.config import settings
 
             client = QdrantClient(
-                host=getattr(settings, "QDRANT_HOST", "localhost"),
-                port=getattr(settings, "QDRANT_PORT", 6333),
+                host=settings.QDRANT_HOST,
+                port=settings.QDRANT_PORT,
                 timeout=5,  # Short timeout for health check
             )
 
@@ -731,8 +731,8 @@ class RAGService:
 
             return {
                 "status": "healthy",
-                "qdrant_host": getattr(settings, "QDRANT_HOST", "localhost"),
-                "qdrant_port": getattr(settings, "QDRANT_PORT", 6333),
+                "qdrant_host": settings.QDRANT_HOST,
+                "qdrant_port": settings.QDRANT_PORT,
                 "collections_count": collection_count,
                 "timestamp": datetime.utcnow().isoformat(),
             }
@@ -749,8 +749,8 @@ class RAGService:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "qdrant_host": getattr(settings, "QDRANT_HOST", "localhost"),
-                "qdrant_port": getattr(settings, "QDRANT_PORT", 6333),
+                "qdrant_host": settings.QDRANT_HOST,
+                "qdrant_port": settings.QDRANT_PORT,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 

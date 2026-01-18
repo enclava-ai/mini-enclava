@@ -173,90 +173,9 @@ def create_default_config(env_vars=None) -> LLMServiceConfig:
         )
         providers["redpill"] = redpill_config
 
-    if env.OPENAI_API_KEY:
-        providers["openai"] = ProviderConfig(
-            name="openai",
-            provider_type="openai",
-            enabled=True,
-            base_url="https://api.openai.com/v1",
-            api_key_env_var="OPENAI_API_KEY",
-            default_model="gpt-4o-mini",
-            supported_models=[
-                "gpt-4o-mini",
-                "gpt-4o",
-                "gpt-3.5-turbo",
-                "text-embedding-3-large",
-                "text-embedding-3-small",
-            ],
-            capabilities=["chat", "embeddings"],
-            priority=2,
-            supports_streaming=True,
-            supports_function_calling=True,
-            max_context_window=128000,
-            max_output_tokens=8192,
-            resilience=ResilienceConfig(
-                max_retries=2,
-                retry_delay_ms=750,
-                timeout_ms=45000,
-                circuit_breaker_threshold=6,
-                circuit_breaker_reset_timeout_ms=60000,
-            ),
-        )
-
-    if env.ANTHROPIC_API_KEY:
-        providers["anthropic"] = ProviderConfig(
-            name="anthropic",
-            provider_type="anthropic",
-            enabled=True,
-            base_url="https://api.anthropic.com/v1",
-            api_key_env_var="ANTHROPIC_API_KEY",
-            default_model="claude-3-opus-20240229",
-            supported_models=[
-                "claude-3-opus-20240229",
-                "claude-3-sonnet-20240229",
-                "claude-3-haiku-20240307",
-            ],
-            capabilities=["chat"],
-            priority=3,
-            supports_streaming=True,
-            supports_function_calling=False,
-            max_context_window=200000,
-            max_output_tokens=4096,
-            resilience=ResilienceConfig(
-                max_retries=3,
-                retry_delay_ms=1000,
-                timeout_ms=60000,
-                circuit_breaker_threshold=5,
-                circuit_breaker_reset_timeout_ms=90000,
-            ),
-        )
-
-    if env.GOOGLE_API_KEY:
-        providers["google"] = ProviderConfig(
-            name="google",
-            provider_type="google",
-            enabled=True,
-            base_url="https://generativelanguage.googleapis.com/v1beta",
-            api_key_env_var="GOOGLE_API_KEY",
-            default_model="models/gemini-1.5-pro-latest",
-            supported_models=[
-                "models/gemini-1.5-pro-latest",
-                "models/gemini-1.5-flash-latest",
-            ],
-            capabilities=["chat", "multimodal"],
-            priority=4,
-            supports_streaming=True,
-            supports_function_calling=True,
-            max_context_window=200000,
-            max_output_tokens=8192,
-            resilience=ResilienceConfig(
-                max_retries=2,
-                retry_delay_ms=1000,
-                timeout_ms=45000,
-                circuit_breaker_threshold=4,
-                circuit_breaker_reset_timeout_ms=60000,
-            ),
-        )
+    # NOTE: Only privatemode and redpill providers are supported.
+    # OpenAI, Anthropic, and Google direct integrations have been removed.
+    # Use privatemode or redpill for all LLM requests.
 
     default_provider = next(
         (name for name, provider in providers.items() if provider.enabled),
@@ -276,14 +195,14 @@ def create_default_config(env_vars=None) -> LLMServiceConfig:
 
 @dataclass
 class EnvironmentVariables:
-    """Environment variables used by LLM service"""
+    """Environment variables used by LLM service
 
-    # Provider API keys
+    Only privatemode and redpill providers are supported.
+    """
+
+    # Provider API keys (only integrated providers)
     PRIVATEMODE_API_KEY: Optional[str] = None
     REDPILL_API_KEY: Optional[str] = None
-    OPENAI_API_KEY: Optional[str] = None
-    ANTHROPIC_API_KEY: Optional[str] = None
-    GOOGLE_API_KEY: Optional[str] = None
 
     # Service settings
     LOG_LLM_PROMPTS: bool = False
@@ -292,9 +211,6 @@ class EnvironmentVariables:
         """Load values from environment"""
         self.PRIVATEMODE_API_KEY = os.getenv("PRIVATEMODE_API_KEY")
         self.REDPILL_API_KEY = os.getenv("REDPILL_API_KEY")
-        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-        self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-        self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
         self.LOG_LLM_PROMPTS = os.getenv("LOG_LLM_PROMPTS", "false").lower() == "true"
 
     def get_api_key(self, provider_name: str) -> Optional[str]:
@@ -302,9 +218,6 @@ class EnvironmentVariables:
         key_mapping = {
             "privatemode": self.PRIVATEMODE_API_KEY,
             "redpill": self.REDPILL_API_KEY,
-            "openai": self.OPENAI_API_KEY,
-            "anthropic": self.ANTHROPIC_API_KEY,
-            "google": self.GOOGLE_API_KEY,
         }
 
         return key_mapping.get(provider_name.lower())

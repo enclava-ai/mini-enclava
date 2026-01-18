@@ -10,20 +10,21 @@ import json
 import base64
 import aiohttp
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 from datetime import datetime, timezone
 
 from .base import BaseAttestationVerifier
 from .models import AttestationResult
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# External verification services
-NVIDIA_NRAS_API = "https://nras.attestation.nvidia.com/v3/attest/gpu"
-PHALA_TDX_VERIFIER = "https://cloud-api.phala.network/api/v1/attestations/verify"
 
-# Only confidential models (full TEE)
-CONFIDENTIAL_MODEL_PREFIXES = ("phala/", "tinfoil/", "nearai/")
+def get_confidential_model_prefixes() -> Tuple[str, ...]:
+    """Get confidential model prefixes from settings."""
+    return tuple(
+        p.strip() for p in settings.REDPILL_CONFIDENTIAL_MODEL_PREFIXES.split(",") if p.strip()
+    )
 
 
 class RedPillAttestationVerifier(BaseAttestationVerifier):
@@ -58,7 +59,7 @@ class RedPillAttestationVerifier(BaseAttestationVerifier):
         Returns:
             True if model is confidential
         """
-        return model.lower().startswith(CONFIDENTIAL_MODEL_PREFIXES)
+        return model.lower().startswith(get_confidential_model_prefixes())
 
     async def verify_provider(self, model: str) -> AttestationResult:
         """
@@ -210,7 +211,7 @@ class RedPillAttestationVerifier(BaseAttestationVerifier):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    PHALA_TDX_VERIFIER,
+                    settings.PHALA_TDX_VERIFIER_URL,
                     json={"hex": intel_quote},
                     timeout=aiohttp.ClientTimeout(total=30)
                 ) as response:
@@ -256,7 +257,7 @@ class RedPillAttestationVerifier(BaseAttestationVerifier):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    NVIDIA_NRAS_API,
+                    settings.NVIDIA_NRAS_API_URL,
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=30)
                 ) as response:

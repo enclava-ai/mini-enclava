@@ -5,6 +5,9 @@
 /**
  * Get the base URL with proper protocol detection
  * This ensures API calls use the same protocol as the page was loaded with
+ *
+ * IMPORTANT: NEXT_PUBLIC_BASE_URL must be set in production environments.
+ * Server-side rendering without this variable will result in incorrect URLs.
  */
 export const getBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
@@ -14,14 +17,25 @@ export const getBaseUrl = (): string => {
     return `${protocol}://${host}`
   }
 
-  // Server-side: default based on environment
+  // Server-side: require NEXT_PUBLIC_BASE_URL in production
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+  if (!baseUrl) {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('NEXT_PUBLIC_BASE_URL not set in production - URLs may be incorrect')
+    }
+    // Development fallback only
+    return 'http://localhost'
+  }
+
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
-  return `${protocol}://${process.env.NEXT_PUBLIC_BASE_URL || 'localhost'}`
+  return `${protocol}://${baseUrl}`
 }
 
 /**
  * Get the API URL with proper protocol detection
  * This is the main function that should be used for all API calls
+ *
+ * IMPORTANT: NEXT_PUBLIC_BASE_URL must be set in production environments.
  */
 export const getApiUrl = (): string => {
   if (typeof window !== 'undefined') {
@@ -31,8 +45,17 @@ export const getApiUrl = (): string => {
     return `${protocol}://${host}`
   }
 
-  // Server-side: default to HTTP for internal requests
-  return `http://${process.env.NEXT_PUBLIC_BASE_URL || 'localhost'}`
+  // Server-side: require NEXT_PUBLIC_BASE_URL in production
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+  if (!baseUrl) {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('NEXT_PUBLIC_BASE_URL not set in production - API URLs may be incorrect')
+    }
+    // Development fallback only
+    return 'http://localhost'
+  }
+
+  return `http://${baseUrl}`
 }
 
 /**

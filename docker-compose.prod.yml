@@ -83,7 +83,8 @@ services:
     environment:
       - BASE_URL=${BASE_URL}
       - NEXT_PUBLIC_BASE_URL=${BASE_URL}
-      - INTERNAL_API_URL=http://enclava-backend:8000
+      # Internal API URL (defaults to Docker service name)
+      - INTERNAL_API_URL=${INTERNAL_API_URL:-http://enclava-backend:8000}
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
     depends_on:

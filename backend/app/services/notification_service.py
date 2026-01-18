@@ -267,15 +267,39 @@ class NotificationService:
     async def _send_email(
         self, notification: Notification, channel: NotificationChannel
     ):
-        """Send email through SMTP"""
+        """Send email through SMTP
+
+        Requires proper SMTP configuration in the channel config:
+        - smtp_host: SMTP server hostname (required)
+        - smtp_port: SMTP server port (required)
+        - from_email: Sender email address (required)
+        """
 
         config = channel.config
         credentials = channel.credentials or {}
 
+        # Validate required configuration - no defaults for critical email settings
+        smtp_host = config.get("smtp_host")
+        smtp_port = config.get("smtp_port")
+        from_email = config.get("from_email")
+
+        if not smtp_host:
+            raise ValueError(
+                "Email notification channel missing 'smtp_host' configuration"
+            )
+        if not smtp_port:
+            raise ValueError(
+                "Email notification channel missing 'smtp_port' configuration"
+            )
+        if not from_email:
+            raise ValueError(
+                "Email notification channel missing 'from_email' configuration"
+            )
+
         # Create message
         msg = MIMEMultipart("alternative")
         msg["Subject"] = notification.subject or "No Subject"
-        msg["From"] = config.get("from_email", "noreply@example.com")
+        msg["From"] = from_email
         msg["To"] = ", ".join(notification.recipients)
 
         if notification.cc_recipients:
@@ -291,8 +315,6 @@ class NotificationService:
             msg.attach(html_part)
 
         # Send email
-        smtp_host = config.get("smtp_host", "localhost")
-        smtp_port = config.get("smtp_port", 587)
         username = credentials.get("username")
         password = credentials.get("password")
         use_tls = config.get("use_tls", True)

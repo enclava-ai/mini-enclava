@@ -18,8 +18,8 @@ class QdrantStatsService:
     """Service for getting live statistics from Qdrant"""
 
     def __init__(self):
-        self.qdrant_host = getattr(settings, "QDRANT_HOST", "enclava-qdrant")
-        self.qdrant_port = getattr(settings, "QDRANT_PORT", 6333)
+        self.qdrant_host = settings.QDRANT_HOST
+        self.qdrant_port = settings.QDRANT_PORT
         self.qdrant_url = f"http://{self.qdrant_host}:{self.qdrant_port}"
 
     async def get_collections_stats(self) -> Dict[str, Any]:

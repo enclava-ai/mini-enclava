@@ -904,14 +904,15 @@ class ChatbotModule(BaseModule):
         for i, msg in enumerate(messages):
             logger.info(f"\n--- Message {i+1} ---")
             logger.info(f"Role: {msg['role']}")
-            logger.info(f"Content ({len(msg['content'])} chars):")
+            msg_content = msg.get('content') or ""
+            logger.info(f"Content ({len(msg_content)} chars):")
             # Truncate long content for logging (full RAG context can be very long)
-            if len(msg["content"]) > 500:
+            if len(msg_content) > 500:
                 logger.info(
-                    f"{msg['content'][:500]}... [truncated, total {len(msg['content'])} chars]"
+                    f"{msg_content[:500]}... [truncated, total {len(msg_content)} chars]"
                 )
             else:
-                logger.info(msg["content"])
+                logger.info(msg_content if msg_content else "(empty)")
         logger.info("=== END COMPREHENSIVE LLM REQUEST ===")
 
         try:
@@ -938,10 +939,10 @@ class ChatbotModule(BaseModule):
 
             # Extract response content
             if llm_response.choices:
-                content = llm_response.choices[0].message.content
-                logger.info(f"Response content length: {len(content)}")
+                message = llm_response.choices[0].message
+                content = message.content
 
-                # Extract token usage
+                # Extract token usage first (needed for edge case detection)
                 input_tokens = 0
                 output_tokens = 0
                 if llm_response.usage:
@@ -952,10 +953,40 @@ class ChatbotModule(BaseModule):
                         f"Token usage - Prompt: {input_tokens}, Completion: {output_tokens}, Total: {usage.total_tokens}"
                     )
 
+                # Handle content extraction
+                if content is not None and content.strip():
+                    logger.info(f"Response content length: {len(content)}")
+                elif message.tool_calls:
+                    # Content can be None when tool_calls are present - this is normal
+                    logger.info("Response has tool_calls instead of content")
+                    content = content or ""
+                elif output_tokens > 0:
+                    # Model generated tokens but returned no content
+                    # This can happen with reasoning models (like gpt-oss-120b) when max_tokens
+                    # is too low and the model doesn't complete reasoning before hitting the limit.
+                    # The RedPill provider should handle this by extracting reasoning_content,
+                    # but if we still hit this, it's a fallback error.
+                    logger.error(
+                        f"Model generated {output_tokens} completion tokens but returned empty/null content. "
+                        f"Model: {llm_response.model}, Provider: {llm_response.provider}. "
+                        f"This may indicate max_tokens is too low for this reasoning model."
+                    )
+                    return (
+                        "The AI model is still processing your request. This can happen with reasoning models "
+                        "when the response limit is too low. Please try again or try a different model.",
+                        sources,
+                        llm_response.provider,
+                        input_tokens,
+                        output_tokens,
+                    )
+                else:
+                    logger.warning("Response content is empty (no tokens generated)")
+                    content = ""
+
                 # Always log response for debugging
                 logger.info("=== COMPREHENSIVE LLM RESPONSE ===")
-                logger.info(f"Response content ({len(content)} chars):")
-                logger.info(content)
+                logger.info(f"Response content ({len(content) if content else 0} chars):")
+                logger.info(content if content else "(empty response)")
                 logger.info(f"Provider used: {llm_response.provider}")
                 if sources:
                     logger.info(f"RAG sources included: {len(sources)} documents")

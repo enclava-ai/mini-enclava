@@ -85,10 +85,7 @@ class Settings(BaseSettings):
         "PLUGIN_ENCRYPTION_KEY"
     )  # Key for encrypting plugin secrets and configurations
 
-    # API Keys for LLM providers
-    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
-    ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
-    GOOGLE_API_KEY: Optional[str] = os.getenv("GOOGLE_API_KEY")
+    # API Keys for LLM providers (only integrated providers: privatemode, redpill)
     PRIVATEMODE_API_KEY: Optional[str] = os.getenv("PRIVATEMODE_API_KEY")
     PRIVATEMODE_PROXY_URL: str = os.getenv(
         "PRIVATEMODE_PROXY_URL", "http://privatemode-proxy:8080/v1"
@@ -98,6 +95,18 @@ class Settings(BaseSettings):
     REDPILL_API_KEY: Optional[str] = os.getenv("REDPILL_API_KEY")
     REDPILL_BASE_URL: str = os.getenv("REDPILL_BASE_URL", "https://api.redpill.ai/v1")
     REDPILL_TEST_MODEL: str = os.getenv("REDPILL_TEST_MODEL", "phala/deepseek-v3.2")
+    # Confidential model prefixes (comma-separated)
+    REDPILL_CONFIDENTIAL_MODEL_PREFIXES: str = os.getenv(
+        "REDPILL_CONFIDENTIAL_MODEL_PREFIXES", "phala/,tinfoil/,nearai/"
+    )
+
+    # Attestation verification endpoints
+    NVIDIA_NRAS_API_URL: str = os.getenv(
+        "NVIDIA_NRAS_API_URL", "https://nras.attestation.nvidia.com/v3/attest/gpu"
+    )
+    PHALA_TDX_VERIFIER_URL: str = os.getenv(
+        "PHALA_TDX_VERIFIER_URL", "https://cloud-api.phala.network/api/v1/attestations/verify"
+    )
 
     # Attestation scheduler configuration
     ATTESTATION_VERIFICATION_INTERVAL_SECONDS: int = int(

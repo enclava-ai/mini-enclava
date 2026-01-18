@@ -219,10 +219,8 @@ class RAGModule(BaseModule):
         """Initialize the RAG module with content processing capabilities"""
 
         try:
-            # Initialize Qdrant client
-            qdrant_host = getattr(settings, "QDRANT_HOST", "localhost")
-            qdrant_port = getattr(settings, "QDRANT_PORT", 6333)
-            qdrant_url = f"http://{qdrant_host}:{qdrant_port}"
+            # Initialize Qdrant client (settings from core.config)
+            qdrant_url = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
             self.qdrant_client = QdrantClient(url=qdrant_url)
 
             # Initialize tokenizer

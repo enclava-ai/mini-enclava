@@ -325,6 +325,9 @@ class RedPillProvider(BaseLLMProvider):
                 if response.status == 200:
                     data = await response.json()
 
+                    # Debug: Log raw response only at debug level
+                    logger.debug(f"Raw RedPill API response: {json.dumps(data, default=str)[:2000]}")
+
                     # Parse response
                     choices = []
                     for choice_data in data.get("choices", []):
@@ -343,15 +346,36 @@ class RedPillProvider(BaseLLMProvider):
                                 for tc in message_data.get("tool_calls", [])
                             ]
 
+                        # Extract content - handle reasoning models (like gpt-oss-120b)
+                        # These models have both 'content' and 'reasoning_content' fields.
+                        # When max_tokens is hit during reasoning, content may be null but
+                        # reasoning_content contains the actual response.
+                        content = message_data.get("content")
+                        reasoning_content = message_data.get("reasoning_content")
+                        finish_reason = choice_data.get("finish_reason")
+
+                        if content is None and reasoning_content:
+                            # Reasoning model hit max_tokens during reasoning phase
+                            # Use reasoning_content as the response with a note
+                            if finish_reason == "length":
+                                logger.warning(
+                                    f"Reasoning model hit max_tokens during reasoning phase. "
+                                    f"Using reasoning_content as response. Consider increasing max_tokens."
+                                )
+                                content = f"[Reasoning truncated due to max_tokens limit]\n\n{reasoning_content}"
+                            else:
+                                # Normal case - reasoning complete, use reasoning as content
+                                content = reasoning_content
+
                         choice = ChatChoice(
                             index=choice_data.get("index", 0),
                             message=ChatMessage(
                                 role=message_data.get("role", "assistant"),
-                                content=message_data.get("content"),  # Can be None with tool calls
+                                content=content,
                                 tool_calls=tool_calls,
                                 tool_call_id=message_data.get("tool_call_id"),
                             ),
-                            finish_reason=choice_data.get("finish_reason"),
+                            finish_reason=finish_reason,
                         )
                         choices.append(choice)
 

@@ -18,6 +18,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from app.core.logging import get_logger
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -419,7 +420,7 @@ async def _load_default_configs():
             "timezone": "UTC",
         },
         "cache": {
-            "redis_url": "redis://empire-redis:6379/0",
+            "redis_url": settings.REDIS_URL,
             "timeout": 30,
             "max_connections": 10,
         },

@@ -10,6 +10,7 @@ import { ModulesProvider } from '@/contexts/ModulesContext'
 import { PluginProvider } from '@/contexts/PluginContext'
 import { ToastProvider } from '@/contexts/ToastContext'
 import { Navigation } from '@/components/ui/navigation'
+import { getBaseUrl } from '@/lib/url-utils'
 
 // Font configuration matching website design
 const inter = Inter({
@@ -31,19 +32,6 @@ const jetbrainsMono = JetBrains_Mono({
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-}
-
-// Function to determine the base URL with proper protocol
-const getBaseUrl = () => {
-  // In production, we need to detect if we're behind HTTPS
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'https' : 'http'
-    const host = process.env.NEXT_PUBLIC_BASE_URL || window.location.hostname
-    return `${protocol}://${host}`
-  }
-  // For build time/server side, default to HTTP for dev, HTTPS for production
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
-  return `${protocol}://${process.env.NEXT_PUBLIC_BASE_URL || 'localhost'}`
 }
 
 export const metadata: Metadata = {
