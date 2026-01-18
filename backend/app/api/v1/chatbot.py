@@ -29,6 +29,7 @@ from app.models.api_key import APIKey
 from app.services.conversation_service import ConversationService
 from app.services.usage_recording import UsageRecordingService
 from app.services.cost_calculator import CostCalculator
+from app.services.llm.service import llm_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -358,6 +359,8 @@ async def chat_with_chatbot(
             raise HTTPException(status_code=400, detail="Chatbot is not active")
 
         model = chatbot.config.get("model", "gpt-3.5-turbo")
+        # Determine which provider will handle this model BEFORE making the request
+        expected_provider = await llm_service.get_provider_for_model(model)
         response_data = {}
 
         # Get chatbot module and generate response
@@ -383,6 +386,8 @@ async def chat_with_chatbot(
             # Extract token counts from response_data if available
             input_tokens = response_data.get("input_tokens", response_data.get("prompt_tokens", 0))
             output_tokens = response_data.get("output_tokens", response_data.get("completion_tokens", 0))
+            # Use actual provider from response, fallback to expected provider
+            actual_provider = response_data.get("provider") or expected_provider
 
             # Record successful usage
             latency_ms = int((time.time() - start_time) * 1000)
@@ -390,7 +395,7 @@ async def chat_with_chatbot(
                 request_id=request_id,
                 user_id=user_id,
                 api_key_id=None,  # None = Chatbot testing (JWT auth)
-                provider_id="privatemode",
+                provider_id=actual_provider,
                 provider_model=model,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
@@ -418,12 +423,12 @@ async def chat_with_chatbot(
                 else "I'm sorry, I couldn't process your request."
             )
 
-            # Record error usage
+            # Record error usage - use expected provider since we know which provider would handle this model
             latency_ms = int((time.time() - start_time) * 1000)
             await usage_service.record_error(
                 user_id=user_id,
                 api_key_id=None,
-                provider_id="privatemode",
+                provider_id=expected_provider,
                 model=model,
                 endpoint=f"/api-internal/v1/chatbot/chat/{chatbot_id}",
                 error=e,
@@ -481,6 +486,10 @@ async def chatbot_chat_completions(
 
         if not chatbot.is_active:
             raise HTTPException(status_code=400, detail="Chatbot is not active")
+
+        # Determine which provider will handle this model BEFORE making the request
+        model = chatbot.config.get("model", "gpt-3.5-turbo")
+        expected_provider = await llm_service.get_provider_for_model(model)
 
         # Find the last user message to extract conversation context
         user_messages = [msg for msg in request.messages if msg.role == "user"]
@@ -581,13 +590,16 @@ async def chatbot_chat_completions(
             usage_service = UsageRecordingService(db)
             response_id = uuid4()
 
+            # Use actual provider from response, fallback to expected provider
+            actual_provider = response_data.get("provider") or expected_provider
+
             # Record with proper usage tracking
             await usage_service.record_request(
                 request_id=response_id,
                 user_id=int(user_id) if user_id else None,
                 api_key_id=None,
-                provider_id="privatemode",
-                provider_model=chatbot.config.get("model", "unknown"),
+                provider_id=actual_provider,
+                provider_model=model,
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 endpoint="/chatbot/{chatbot_id}/chat/completions",
@@ -999,6 +1011,8 @@ async def external_chat_with_chatbot(
             raise HTTPException(status_code=400, detail="Chatbot is not active")
 
         model = chatbot.config.get("model", "gpt-3.5-turbo")
+        # Determine which provider will handle this model BEFORE making the request
+        expected_provider = await llm_service.get_provider_for_model(model)
 
         # Initialize conversation service
         conversation_service = ConversationService(db)
@@ -1059,6 +1073,8 @@ async def external_chat_with_chatbot(
             input_tokens = response_data.get("input_tokens", response_data.get("prompt_tokens", 0))
             output_tokens = response_data.get("output_tokens", response_data.get("completion_tokens", 0))
             total_tokens = input_tokens + output_tokens
+            # Use actual provider from response, fallback to expected provider
+            actual_provider = response_data.get("provider") or expected_provider
 
             # Record successful usage to usage_records table
             latency_ms = int((time.time() - start_time) * 1000)
@@ -1066,7 +1082,7 @@ async def external_chat_with_chatbot(
                 request_id=request_id,
                 user_id=api_key.user_id,
                 api_key_id=api_key.id,
-                provider_id="privatemode",
+                provider_id=actual_provider,
                 provider_model=model,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
@@ -1097,12 +1113,12 @@ async def external_chat_with_chatbot(
             output_tokens = 0
             total_tokens = 0
 
-            # Record error usage
+            # Record error usage - use expected provider since we know which provider would handle this model
             latency_ms = int((time.time() - start_time) * 1000)
             await usage_service.record_error(
                 user_id=api_key.user_id,
                 api_key_id=api_key.id,
-                provider_id="privatemode",
+                provider_id=expected_provider,
                 model=model,
                 endpoint=f"/api/v1/chatbot/external/{chatbot_id}/chat",
                 error=e,
@@ -1302,6 +1318,8 @@ async def external_chatbot_chat_completions(
             raise HTTPException(status_code=400, detail="Chatbot is not active")
 
         model = chatbot.config.get("model", "gpt-3.5-turbo")
+        # Determine which provider will handle this model BEFORE making the request
+        expected_provider = await llm_service.get_provider_for_model(model)
 
         # Find the last user message to extract conversation context
         user_messages = [msg for msg in request.messages if msg.role == "user"]
@@ -1378,6 +1396,8 @@ async def external_chatbot_chat_completions(
             # Extract actual token counts from response_data if available
             input_tokens = response_data.get("input_tokens", response_data.get("prompt_tokens", 0))
             output_tokens = response_data.get("output_tokens", response_data.get("completion_tokens", 0))
+            # Use actual provider from response, fallback to expected provider
+            actual_provider = response_data.get("provider") or expected_provider
 
             # Record successful usage to usage_records table
             latency_ms = int((time.time() - start_time) * 1000)
@@ -1385,7 +1405,7 @@ async def external_chatbot_chat_completions(
                 request_id=request_id,
                 user_id=api_key.user_id,
                 api_key_id=api_key.id,
-                provider_id="privatemode",
+                provider_id=actual_provider,
                 provider_model=model,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
@@ -1413,12 +1433,12 @@ async def external_chatbot_chat_completions(
             )
             sources = None
 
-            # Record error usage
+            # Record error usage - use expected provider since we know which provider would handle this model
             latency_ms = int((time.time() - start_time) * 1000)
             await usage_service.record_error(
                 user_id=api_key.user_id,
                 api_key_id=api_key.id,
-                provider_id="privatemode",
+                provider_id=expected_provider,
                 model=model,
                 endpoint=f"/api/v1/chatbot/{chatbot_id}/chat/completions",
                 error=e,

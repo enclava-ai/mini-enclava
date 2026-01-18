@@ -293,7 +293,7 @@ class RedPillAttestationVerifier(BaseAttestationVerifier):
         Verify signing address and nonce are bound in TDX report data.
 
         CRITICAL SECURITY CHECK: The Intel TDX report data first 64 bytes contain:
-        - Bytes 0-31: Signing address (public key, left-padded with zeros)
+        - Bytes 0-31: Signing address (may be left-padded with zeros or right-aligned)
         - Bytes 32-63: Request nonce
 
         This proves:
@@ -322,26 +322,41 @@ class RedPillAttestationVerifier(BaseAttestationVerifier):
         try:
             report_data = bytes.fromhex(report_data_hex.removeprefix("0x"))
 
-            # Extract embedded address and nonce from report data
-            embedded_address = report_data[:32]
+            # Extract embedded nonce from report data (always at bytes 32-63)
             embedded_nonce = report_data[32:64]
 
             # Parse signing address based on algorithm
             signing_algo = attestation.get("signing_algo", "ecdsa")
+            signing_address_bytes = bytes.fromhex(signing_address.removeprefix("0x"))
+            address_len = len(signing_address_bytes)
 
-            if signing_algo == "ecdsa":
-                # ECDSA: 20-byte Ethereum address
-                signing_address_bytes = bytes.fromhex(signing_address.removeprefix("0x"))
-            else:
-                # Ed25519: 32-byte public key
-                signing_address_bytes = bytes.fromhex(signing_address.removeprefix("0x"))
+            # Extract first 32 bytes for address verification
+            embedded_address_field = report_data[:32]
 
-            # Verify signing address (left-padded with zeros to 32 bytes)
-            expected_address = signing_address_bytes.ljust(32, b"\x00")
-            if embedded_address != expected_address:
+            # Check address binding - support multiple formats:
+            # Format 1: Left-padded with zeros (Ethereum style: 12 zero bytes + 20-byte address)
+            expected_left_padded = signing_address_bytes.rjust(32, b"\x00")
+            # Format 2: Right-padded with zeros (address at start, zeros at end)
+            expected_right_padded = signing_address_bytes.ljust(32, b"\x00")
+            # Format 3: Address at start of field (check first N bytes match)
+            embedded_address_prefix = embedded_address_field[:address_len]
+
+            address_verified = False
+            if embedded_address_field == expected_left_padded:
+                logger.debug("Address verified: left-padded format")
+                address_verified = True
+            elif embedded_address_field == expected_right_padded:
+                logger.debug("Address verified: right-padded format")
+                address_verified = True
+            elif embedded_address_prefix == signing_address_bytes:
+                logger.debug("Address verified: prefix match format")
+                address_verified = True
+
+            if not address_verified:
                 logger.warning(
-                    f"Signing address not embedded in TEE report data: "
-                    f"expected {expected_address.hex()[:32]}..., got {embedded_address.hex()[:32]}..."
+                    f"Signing address not found in TEE report data: "
+                    f"address={signing_address_bytes.hex()}, "
+                    f"report_data_first_32={embedded_address_field.hex()}"
                 )
                 return False
 

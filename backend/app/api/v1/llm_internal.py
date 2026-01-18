@@ -139,6 +139,9 @@ async def create_chat_completion(
     user_id = current_user.get("id", current_user.get("sub"))
     usage_service = UsageRecordingService(db)
 
+    # Determine which provider will handle this model BEFORE making the request
+    expected_provider = await llm_service.get_provider_for_model(request.model)
+
     try:
         # Convert request to LLM service format
         # For internal use, we use a special api_key_id of 0 to indicate JWT auth (Playground)
@@ -174,7 +177,7 @@ async def create_chat_completion(
             request_id=request_id,
             user_id=user_id,
             api_key_id=None,  # None with no chatbot_id = Playground (JWT auth)
-            provider_id=getattr(response, "provider", "privatemode"),
+            provider_id=getattr(response, "provider", None) or expected_provider,
             provider_model=request.model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -220,7 +223,7 @@ async def create_chat_completion(
         await usage_service.record_error(
             user_id=user_id,
             api_key_id=None,  # None = Playground/internal (JWT auth)
-            provider_id="privatemode",
+            provider_id=expected_provider,
             model=request.model,
             endpoint="/api-internal/v1/llm/chat/completions",
             error=e,
@@ -240,7 +243,7 @@ async def create_chat_completion(
         await usage_service.record_error(
             user_id=user_id,
             api_key_id=None,  # None = Playground/internal (JWT auth)
-            provider_id="privatemode",
+            provider_id=expected_provider,
             model=request.model,
             endpoint="/api-internal/v1/llm/chat/completions",
             error=e,
@@ -262,7 +265,7 @@ async def create_chat_completion(
             await usage_service.record_error(
                 user_id=user_id,
                 api_key_id=None,  # None = Playground/internal (JWT auth)
-                provider_id="privatemode",
+                provider_id=expected_provider,
                 model=request.model,
                 endpoint="/api-internal/v1/llm/chat/completions",
                 error=e,

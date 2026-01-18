@@ -413,12 +413,10 @@ class LLMService:
             )
 
         try:
-            # We need to manually handle the recording since we're yielding
-            async for chunk in await resilience_manager.execute(
+            # Use streaming-aware execute that handles async generators properly
+            async for chunk in resilience_manager.execute_stream(
                 provider.create_chat_completion_stream,
                 request,
-                retryable_exceptions=(ProviderError, TimeoutError),
-                non_retryable_exceptions=(ValidationError,),
             ):
                 if recorder:
                     recorder.process_chunk(chunk)

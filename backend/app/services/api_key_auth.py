@@ -161,7 +161,11 @@ async def get_api_key_context(
     # 1. Check Authorization header (Bearer token)
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        api_key = auth_header[7:]
+        token = auth_header[7:]
+        # Skip if token looks like a JWT (starts with "eyJ" = base64 '{"')
+        # JWTs are handled by get_current_user, not API key auth
+        if not token.startswith("eyJ"):
+            api_key = token
 
     # 2. Check X-API-Key header
     if not api_key:

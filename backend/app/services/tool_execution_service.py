@@ -41,7 +41,8 @@ class ToolExecutionService:
             self.docker_client.ping()
             logger.info("Docker client initialized successfully")
         except DockerException as e:
-            logger.error(f"Failed to initialize Docker client: {e}")
+            # Expected in containerized deployments without Docker-in-Docker
+            logger.debug(f"Docker client not available: {e}")
             self.docker_client = None
 
     async def execute_tool(

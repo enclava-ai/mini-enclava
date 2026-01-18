@@ -831,6 +831,9 @@ class AgentModule(BaseModule):
         temperature = request.temperature if request.temperature is not None else agent.temperature
         max_tokens = request.max_tokens if request.max_tokens is not None else agent.max_tokens
 
+        # Determine which provider will handle this model BEFORE making the request
+        expected_provider = await llm_service.get_provider_for_model(agent.model)
+
         # Create chat request
         from app.services.llm.models import ChatRequest as LLMChatRequest, ChatMessage as LLMChatMessage
         llm_messages = [LLMChatMessage(role=m.role, content=m.content) for m in messages]
@@ -886,13 +889,15 @@ class AgentModule(BaseModule):
         prompt_tokens = response.usage.prompt_tokens if response.usage else 0
         completion_tokens = response.usage.completion_tokens if response.usage else 0
         latency_ms = int((time.time() - start_time) * 1000)
+        # Use actual provider from response, fallback to expected provider
+        actual_provider = getattr(response, "provider", None) or expected_provider
 
         # Record usage to usage_records table
         await usage_service.record_request(
             request_id=request_id,
             user_id=api_key.user_id,
             api_key_id=api_key.id,
-            provider_id="privatemode",
+            provider_id=actual_provider,
             provider_model=agent.model,
             input_tokens=prompt_tokens,
             output_tokens=completion_tokens,
@@ -1148,6 +1153,9 @@ class AgentModule(BaseModule):
             temperature = request.temperature if request.temperature is not None else agent.temperature
             max_tokens = request.max_tokens if request.max_tokens is not None else agent.max_tokens
 
+            # Determine which provider will handle this model BEFORE making the request
+            expected_provider = await llm_service.get_provider_for_model(agent.model)
+
             # Create chat request
             from app.services.llm.models import ChatRequest as LLMChatRequest, ChatMessage as LLMChatMessage
             llm_messages = [LLMChatMessage(role=m.role, content=m.content) for m in messages]
@@ -1203,6 +1211,8 @@ class AgentModule(BaseModule):
             prompt_tokens = response.usage.prompt_tokens if response.usage else 0
             completion_tokens = response.usage.completion_tokens if response.usage else 0
             latency_ms = int((time.time() - start_time) * 1000)
+            # Use actual provider from response, fallback to expected provider
+            actual_provider = getattr(response, "provider", None) or expected_provider
 
             # Determine api_key_id for recording
             api_key_id = None
@@ -1216,7 +1226,7 @@ class AgentModule(BaseModule):
                 request_id=request_id,
                 user_id=user_id,
                 api_key_id=api_key_id,  # None for JWT-only auth
-                provider_id="privatemode",
+                provider_id=actual_provider,
                 provider_model=agent.model,
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,

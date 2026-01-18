@@ -2,6 +2,7 @@
 LLM API endpoints - interface to secure LLM service with authentication and budget enforcement
 """
 
+import json
 import logging
 import time
 from typing import Dict, Any, List, Optional
@@ -334,15 +335,63 @@ async def create_chat_completion(
         # Handle streaming request
         if chat_request.stream:
             async def event_generator():
+                output_tokens = 0
+                input_tokens = int(estimated_tokens - (chat_request.max_tokens or 150))
+
                 try:
-                    async for chunk in await llm_service.create_chat_completion_stream(
+                    async for chunk in llm_service.create_chat_completion_stream(
                         llm_request, db, user_id, api_key_id
                     ):
-                        yield f"data: {chunk}\n\n"
+                        # Track output tokens from chunk content
+                        choices = chunk.get("choices", [])
+                        if choices:
+                            delta = choices[0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                # Rough token count: ~4 chars per token
+                                output_tokens += max(1, len(content) // 4)
+
+                        # Check for usage in final chunk (OpenAI includes it)
+                        if "usage" in chunk:
+                            usage_data = chunk["usage"]
+                            input_tokens = usage_data.get("prompt_tokens", input_tokens)
+                            output_tokens = usage_data.get("completion_tokens", output_tokens)
+
+                        yield f"data: {json.dumps(chunk)}\n\n"
                     yield "data: [DONE]\n\n"
                 except Exception as e:
                     logger.error(f"Streaming error: {e}")
-                    yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                finally:
+                    # Record budget/usage after stream completes (or fails)
+                    if auth_type == "api_key" and api_key and (input_tokens + output_tokens) > 0:
+                        try:
+                            total_tokens = input_tokens + output_tokens
+
+                            # Calculate accurate cost
+                            actual_cost_cents = CostCalculator.calculate_cost_cents(
+                                chat_request.model, input_tokens, output_tokens
+                            )
+
+                            # Update API key usage statistics
+                            auth_service = APIKeyAuthService(db)
+                            await auth_service.update_usage_stats(
+                                context, total_tokens, actual_cost_cents
+                            )
+
+                            # Record actual usage in budgets
+                            await async_record_request_usage(
+                                db,
+                                api_key,
+                                chat_request.model,
+                                input_tokens,
+                                output_tokens,
+                                "chat/completions",
+                            )
+
+                            await db.commit()
+                        except Exception as budget_error:
+                            logger.error(f"Failed to record streaming usage: {budget_error}")
 
             return StreamingResponse(
                 event_generator(),

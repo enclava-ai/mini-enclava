@@ -564,7 +564,7 @@ class ChatbotModule(BaseModule):
 
             else:
                 # Use existing non-tool path
-                response_content, sources = await self._generate_response(
+                response_content, sources, provider, input_tokens, output_tokens = await self._generate_response(
                     request.message, messages, chatbot_config, request.context, db
                 )
 
@@ -696,8 +696,12 @@ class ChatbotModule(BaseModule):
         config: ChatbotConfig,
         context: Optional[Dict] = None,
         db=None,
-    ) -> tuple[str, Optional[List]]:
-        """Generate response using LLM with optional RAG"""
+    ) -> tuple[str, Optional[List], Optional[str], int, int]:
+        """Generate response using LLM with optional RAG.
+
+        Returns:
+            tuple: (response_content, sources, provider, input_tokens, output_tokens)
+        """
 
         # Lazy load dependencies if not available
         await self._ensure_dependencies()
@@ -873,7 +877,7 @@ class ChatbotModule(BaseModule):
                 "Verification may require entering a recovery password, but that does not encrypt the backup — "
                 "it only proves you have the correct credentials to restore. Keep the card and password secure."
             )
-            return policy_answer, sources
+            return policy_answer, sources, None, 0, 0
 
         messages = self._build_conversation_messages(
             db_messages, config, rag_context, extra_instructions
@@ -937,23 +941,30 @@ class ChatbotModule(BaseModule):
                 content = llm_response.choices[0].message.content
                 logger.info(f"Response content length: {len(content)}")
 
+                # Extract token usage
+                input_tokens = 0
+                output_tokens = 0
+                if llm_response.usage:
+                    usage = llm_response.usage
+                    input_tokens = usage.prompt_tokens or 0
+                    output_tokens = usage.completion_tokens or 0
+                    logger.info(
+                        f"Token usage - Prompt: {input_tokens}, Completion: {output_tokens}, Total: {usage.total_tokens}"
+                    )
+
                 # Always log response for debugging
                 logger.info("=== COMPREHENSIVE LLM RESPONSE ===")
                 logger.info(f"Response content ({len(content)} chars):")
                 logger.info(content)
-                if llm_response.usage:
-                    usage = llm_response.usage
-                    logger.info(
-                        f"Token usage - Prompt: {usage.prompt_tokens}, Completion: {usage.completion_tokens}, Total: {usage.total_tokens}"
-                    )
+                logger.info(f"Provider used: {llm_response.provider}")
                 if sources:
                     logger.info(f"RAG sources included: {len(sources)} documents")
                 logger.info("=== END COMPREHENSIVE LLM RESPONSE ===")
 
-                return content, sources
+                return content, sources, llm_response.provider, input_tokens, output_tokens
             else:
                 logger.warning("No choices in LLM response")
-                return "I received an empty response from the AI model.", sources
+                return "I received an empty response from the AI model.", sources, None, 0, 0
 
         except SecurityError as e:
             logger.error(f"Security error in LLM completion: {e}")
@@ -974,6 +985,9 @@ class ChatbotModule(BaseModule):
             return (
                 "I'm currently unable to process your request. Please try again later.",
                 None,
+                None,
+                0,
+                0,
             )
 
     def _build_conversation_messages(
@@ -1242,7 +1256,7 @@ class ChatbotModule(BaseModule):
                     )
                 ]
 
-                response_content, sources = await self._generate_response(
+                response_content, sources, provider, input_tokens, output_tokens = await self._generate_response(
                     message, temp_messages, config, None, db
                 )
 
@@ -1251,6 +1265,9 @@ class ChatbotModule(BaseModule):
                     "sources": sources,
                     "conversation_id": None,
                     "message_id": f"msg_{uuid.uuid4()}",
+                    "provider": provider,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
                 }
 
         except Exception as e:
@@ -1266,6 +1283,9 @@ class ChatbotModule(BaseModule):
                 "sources": None,
                 "conversation_id": None,
                 "message_id": f"msg_{uuid.uuid4()}",
+                "provider": None,
+                "input_tokens": 0,
+                "output_tokens": 0,
             }
 
     # Workflow Integration Methods

@@ -20,6 +20,7 @@ from app.schemas.responses import ResponseCreateRequest, ResponseObject, TokenUs
 from app.services.responses.translator import ItemMessageTranslator
 from app.services.tool_calling_service import ToolCallingService
 from app.services.llm.models import ChatRequest, ChatMessage
+from app.services.llm.service import llm_service
 from app.services.budget_enforcement import BudgetEnforcementService
 from app.services.usage_recording import UsageRecordingService
 from app.services.llm.streaming_tracker import StreamingUsage
@@ -117,7 +118,10 @@ class ResponsesService:
             if request.instructions:
                 messages.insert(0, ChatMessage(role="system", content=request.instructions))
 
-            # 9. Prepare chat request
+            # 9. Determine which provider will handle this model BEFORE making the request
+            expected_provider = await llm_service.get_provider_for_model(request.model)
+
+            # 10. Prepare chat request
             chat_request = ChatRequest(
                 model=request.model,
                 messages=messages,
@@ -128,7 +132,7 @@ class ResponsesService:
                 stream=False
             )
 
-            # 10. Execute agentic loop with tool calling
+            # 11. Execute agentic loop with tool calling
             total_input_tokens = 0
             total_output_tokens = 0
 
@@ -159,11 +163,13 @@ class ResponsesService:
             # 13.5 Record usage to usage_records table (source of truth for billing)
             execution_time = (time.time() - start_time) * 1000
             usage_service = UsageRecordingService(self.db)
+            # Use actual provider from LLM response, fallback to expected provider
+            actual_provider = getattr(llm_response, "provider", None) or expected_provider
             await usage_service.record_request(
                 request_id=uuid4(),
                 user_id=user.id,
                 api_key_id=api_key.id,
-                provider_id="privatemode",
+                provider_id=actual_provider,
                 provider_model=request.model,
                 input_tokens=total_input_tokens,
                 output_tokens=total_output_tokens,
@@ -703,7 +709,10 @@ class ResponsesService:
             if request.instructions:
                 messages.insert(0, ChatMessage(role="system", content=request.instructions))
 
-            # 9. Prepare chat request for streaming with tools
+            # 9. Determine which provider will handle this model BEFORE making the request
+            expected_provider = await llm_service.get_provider_for_model(request.model)
+
+            # 10. Prepare chat request for streaming with tools
             chat_request = ChatRequest(
                 model=request.model,
                 messages=messages,
@@ -714,21 +723,23 @@ class ResponsesService:
                 stream=True  # Enable streaming
             )
 
-            # 10. Create usage recording callback
+            # 11. Create usage recording callback
             request_id = uuid4()
             usage_service = UsageRecordingService(self.db)
 
             async def record_streaming_usage(
-                usage: StreamingUsage, status: str, had_error: bool
+                usage: StreamingUsage, status: str, had_error: bool, provider: str = None
             ) -> None:
                 """Callback to record usage when streaming completes."""
+                # Use provided provider or fall back to expected_provider
+                final_provider = provider or expected_provider
                 try:
                     # Record to usage_records table
                     await usage_service.record_request(
                         request_id=request_id,
                         user_id=user.id if hasattr(user, "id") else user.get("id"),
                         api_key_id=api_key.id if api_key else None,
-                        provider_id="privatemode",
+                        provider_id=final_provider,
                         provider_model=request.model,
                         input_tokens=usage.input_tokens,
                         output_tokens=usage.output_tokens,

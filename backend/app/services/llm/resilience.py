@@ -7,7 +7,7 @@ Implements retry logic, circuit breaker, and timeout management.
 import asyncio
 import logging
 import time
-from typing import Callable, Any, Optional, Dict, Type
+from typing import Callable, Any, Optional, Dict, Type, AsyncGenerator
 from enum import Enum
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -283,6 +283,69 @@ class ResilienceManager:
             execution_time = (time.time() - start_time) * 1000
             logger.error(
                 f"Resilient execution failed for {self.provider_name} after {execution_time:.2f}ms: {e}"
+            )
+
+            raise
+
+    async def execute_stream(
+        self,
+        func: Callable[..., AsyncGenerator[Any, None]],
+        *args,
+        **kwargs,
+    ) -> AsyncGenerator[Any, None]:
+        """
+        Execute an async generator function with circuit breaker protection.
+
+        Unlike execute(), this method:
+        - Does NOT apply retry logic (retrying a partially consumed stream is problematic)
+        - Does NOT apply timeout to the entire stream (individual chunk timeouts would need
+          to be handled by the provider)
+        - DOES check circuit breaker before starting
+        - DOES record success/failure based on stream completion
+
+        Args:
+            func: Async generator function to execute
+            *args: Arguments to pass to func
+            **kwargs: Keyword arguments to pass to func
+
+        Yields:
+            Chunks from the async generator
+
+        Raises:
+            LLMError: If circuit breaker is open
+            Any exception from the underlying generator
+        """
+        # Check circuit breaker before starting stream
+        if not self.circuit_breaker.can_execute():
+            error_msg = f"Circuit breaker is OPEN for provider {self.provider_name}"
+            logger.error(error_msg)
+            raise LLMError(error_msg, error_code="CIRCUIT_BREAKER_OPEN")
+
+        start_time = time.time()
+
+        try:
+            # Get the async generator from the function
+            stream = func(*args, **kwargs)
+
+            # Yield all chunks from the stream
+            async for chunk in stream:
+                yield chunk
+
+            # Stream completed successfully
+            self.circuit_breaker.record_success()
+
+            execution_time = (time.time() - start_time) * 1000
+            logger.debug(
+                f"Streaming execution succeeded for {self.provider_name} in {execution_time:.2f}ms"
+            )
+
+        except Exception as e:
+            # Record failure
+            self.circuit_breaker.record_failure()
+
+            execution_time = (time.time() - start_time) * 1000
+            logger.error(
+                f"Streaming execution failed for {self.provider_name} after {execution_time:.2f}ms: {e}"
             )
 
             raise
