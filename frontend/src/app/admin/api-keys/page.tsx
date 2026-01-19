@@ -98,8 +98,9 @@ interface AgentConfig {
 }
 
 const PERMISSION_OPTIONS = [
-  { value: "llm:chat", label: "LLM Chat Completions" },
-  { value: "llm:embeddings", label: "LLM Embeddings" },
+  { value: "chat.completions", label: "LLM Chat Completions" },
+  { value: "embeddings.create", label: "LLM Embeddings" },
+  { value: "models.list", label: "List Models" },
 ];
 
 function ApiKeysContent() {
@@ -149,7 +150,7 @@ function ApiKeysContent() {
         ...prev,
         name: `${decodeURIComponent(chatbotName)} API Key`,
         allowed_chatbots: [chatbotId],
-        scopes: ["llm:chat"] // Chatbots need chat completion permission
+        scopes: ["chat.completions"] // Chatbots need chat completion permission
       }));
       
       // Automatically open the create dialog
@@ -323,10 +324,15 @@ function ApiKeysContent() {
       await apiClient.put(`/api-internal/v1/api-keys/${keyId}`, {
         name: editKeyData.name,
         description: editKeyData.description,
+        scopes: editKeyData.scopes,
         is_unlimited: editKeyData.is_unlimited,
-        budget_limit_cents: editKeyData.is_unlimited ? null : editKeyData.budget_limit,
-        budget_type: editKeyData.is_unlimited ? null : editKeyData.budget_type,
+        // When is_unlimited is false (budget IS set), send the budget values
+        budget_limit_cents: !editKeyData.is_unlimited ? editKeyData.budget_limit : null,
+        budget_type: !editKeyData.is_unlimited ? editKeyData.budget_type : null,
         expires_at: editKeyData.expires_at,
+        allowed_models: editKeyData.allowed_models,
+        allowed_chatbots: editKeyData.allowed_chatbots,
+        allowed_agents: editKeyData.allowed_agents,
       });
 
       toast({
@@ -352,10 +358,14 @@ function ApiKeysContent() {
     setEditKeyData({
       name: apiKey.name,
       description: apiKey.description,
+      scopes: apiKey.scopes,
       is_unlimited: apiKey.is_unlimited,
       budget_limit: apiKey.budget_limit,
       budget_type: apiKey.budget_type || "monthly",
       expires_at: apiKey.expires_at,
+      allowed_models: apiKey.allowed_models || [],
+      allowed_chatbots: apiKey.allowed_chatbots || [],
+      allowed_agents: apiKey.allowed_agents || [],
     });
     setShowEditDialog(apiKey.id);
   };
@@ -601,15 +611,15 @@ function ApiKeysContent() {
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    id="unlimited-budget"
-                    checked={newKeyData.is_unlimited}
-                    onChange={(e) => setNewKeyData(prev => ({ ...prev, is_unlimited: e.target.checked }))}
+                    id="set-budget"
+                    checked={!newKeyData.is_unlimited}
+                    onChange={(e) => setNewKeyData(prev => ({ ...prev, is_unlimited: !e.target.checked }))}
                     className="rounded"
                   />
-                  <Label htmlFor="unlimited-budget">Set budget</Label>
+                  <Label htmlFor="set-budget">Set budget</Label>
                 </div>
 
-                {newKeyData.is_unlimited && (
+                {!newKeyData.is_unlimited && (
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="budget-type">Budget Type</Label>
@@ -854,16 +864,16 @@ function ApiKeysContent() {
 
       {/* Edit API Key Dialog */}
       <Dialog open={!!showEditDialog} onOpenChange={(open) => !open && setShowEditDialog(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit API Key</DialogTitle>
             <DialogDescription>
-              Update your API key settings and budget configuration
+              Update your API key settings and permissions
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-name">Name</Label>
                 <Input
@@ -874,13 +884,160 @@ function ApiKeysContent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-description">Description</Label>
+                <Label htmlFor="edit-expires">Expires At (Optional)</Label>
                 <Input
-                  id="edit-description"
-                  value={editKeyData.description || ""}
-                  onChange={(e) => setEditKeyData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="API Key Description"
+                  id="edit-expires"
+                  type="datetime-local"
+                  value={editKeyData.expires_at?.slice(0, 16) || ""}
+                  onChange={(e) => setEditKeyData(prev => ({ ...prev, expires_at: e.target.value || null }))}
                 />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                value={editKeyData.description || ""}
+                onChange={(e) => setEditKeyData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="API Key Description"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Permissions</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {PERMISSION_OPTIONS.map((permission) => (
+                  <div key={permission.value} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`edit-${permission.value}`}
+                      checked={(editKeyData.scopes || []).includes(permission.value)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditKeyData(prev => ({
+                          ...prev,
+                          scopes: checked
+                            ? [...(prev.scopes || []), permission.value]
+                            : (prev.scopes || []).filter(p => p !== permission.value)
+                        }));
+                      }}
+                      className="rounded"
+                    />
+                    <Label htmlFor={`edit-${permission.value}`} className="text-sm">
+                      {permission.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Model Restrictions - Hidden for chatbot API keys since model is already selected by chatbot */}
+            {(editKeyData.allowed_chatbots || []).length === 0 && (
+              <div className="space-y-2">
+                <Label>Model Restrictions (Optional)</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Leave empty to allow all models, or select specific models to restrict access.
+                </p>
+                <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                  {availableModels.map((model) => (
+                    <div key={model.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`edit-model-${model.id}`}
+                        checked={(editKeyData.allowed_models || []).includes(model.id)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setEditKeyData(prev => ({
+                            ...prev,
+                            allowed_models: checked
+                              ? [...(prev.allowed_models || []), model.id]
+                              : (prev.allowed_models || []).filter(m => m !== model.id)
+                          }));
+                        }}
+                        className="rounded"
+                      />
+                      <Label htmlFor={`edit-model-${model.id}`} className="text-sm">
+                        {model.id}
+                      </Label>
+                    </div>
+                  ))}
+                  {availableModels.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No models available</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Chatbot Restrictions */}
+            <div className="space-y-2">
+              <Label>Chatbot Restrictions (Optional)</Label>
+              <p className="text-sm text-muted-foreground mb-2">
+                Leave empty to allow all chatbots, or select specific chatbots to restrict access.
+              </p>
+              <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                {availableChatbots.map((chatbot) => (
+                  <div key={chatbot.id} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`edit-chatbot-${chatbot.id}`}
+                      checked={(editKeyData.allowed_chatbots || []).includes(chatbot.id)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditKeyData(prev => ({
+                          ...prev,
+                          allowed_chatbots: checked
+                            ? [...(prev.allowed_chatbots || []), chatbot.id]
+                            : (prev.allowed_chatbots || []).filter(c => c !== chatbot.id)
+                        }));
+                      }}
+                      className="rounded"
+                    />
+                    <Label htmlFor={`edit-chatbot-${chatbot.id}`} className="text-sm">
+                      {chatbot.name}
+                    </Label>
+                  </div>
+                ))}
+                {availableChatbots.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No chatbots available</p>
+                )}
+              </div>
+            </div>
+
+            {/* Agent Restrictions */}
+            <div className="space-y-2">
+              <Label>Agent Restrictions (Optional)</Label>
+              <p className="text-sm text-muted-foreground mb-2">
+                Leave empty to allow all agents, or select specific agents to restrict access.
+              </p>
+              <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                {availableAgents.map((agent) => (
+                  <div key={agent.id} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`edit-agent-${agent.id}`}
+                      checked={(editKeyData.allowed_agents || []).includes(String(agent.id))}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        const agentId = String(agent.id);
+                        setEditKeyData(prev => ({
+                          ...prev,
+                          allowed_agents: checked
+                            ? [...(prev.allowed_agents || []), agentId]
+                            : (prev.allowed_agents || []).filter(a => a !== agentId)
+                        }));
+                      }}
+                      className="rounded"
+                    />
+                    <Label htmlFor={`edit-agent-${agent.id}`} className="text-sm">
+                      {agent.name}
+                    </Label>
+                  </div>
+                ))}
+                {availableAgents.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No agents available</p>
+                )}
               </div>
             </div>
 
@@ -889,15 +1046,15 @@ function ApiKeysContent() {
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
-                  id="edit-unlimited-budget"
-                  checked={editKeyData.is_unlimited || false}
-                  onChange={(e) => setEditKeyData(prev => ({ ...prev, is_unlimited: e.target.checked }))}
+                  id="edit-set-budget"
+                  checked={!editKeyData.is_unlimited}
+                  onChange={(e) => setEditKeyData(prev => ({ ...prev, is_unlimited: !e.target.checked }))}
                   className="rounded"
                 />
-                <Label htmlFor="edit-unlimited-budget">Set budget</Label>
+                <Label htmlFor="edit-set-budget">Set budget</Label>
               </div>
 
-              {editKeyData.is_unlimited && (
+              {!editKeyData.is_unlimited && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-budget-type">Budget Type</Label>
@@ -922,8 +1079,8 @@ function ApiKeysContent() {
                       step="0.01"
                       min="0"
                       value={(editKeyData.budget_limit || 0) / 100}
-                      onChange={(e) => setEditKeyData(prev => ({ 
-                        ...prev, 
+                      onChange={(e) => setEditKeyData(prev => ({
+                        ...prev,
                         budget_limit: Math.round(parseFloat(e.target.value || "0") * 100)
                       }))}
                       placeholder="0.00"
@@ -931,18 +1088,6 @@ function ApiKeysContent() {
                   </div>
                 </div>
               )}
-            </div>
-
-
-            {/* Expiration */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-expires-at">Expiration Date (Optional)</Label>
-              <Input
-                id="edit-expires-at"
-                type="date"
-                value={editKeyData.expires_at?.split('T')[0] || ""}
-                onChange={(e) => setEditKeyData(prev => ({ ...prev, expires_at: e.target.value ? `${e.target.value}T23:59:59Z` : null }))}
-              />
             </div>
           </div>
 

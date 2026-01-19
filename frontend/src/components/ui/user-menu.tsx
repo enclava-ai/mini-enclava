@@ -22,7 +22,7 @@ import { useState } from "react"
 const getApiUrl = () => {
   if (typeof window !== 'undefined') {
     const protocol = window.location.protocol.slice(0, -1) // Remove ':' from 'https:'
-    const host = window.location.hostname
+    const host = window.location.host // Use host (includes port) instead of hostname
     return `${protocol}://${host}`
   }
   return `http://${process.env.NEXT_PUBLIC_BASE_URL || 'localhost'}`

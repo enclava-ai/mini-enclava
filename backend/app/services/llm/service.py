@@ -230,10 +230,10 @@ class LLMService:
                 logger.error(f"Initial attestation verification failed for {provider_id}: {e}")
 
     async def create_chat_completion(
-        self, 
+        self,
         request: ChatRequest,
-        db: Optional["AsyncSession"] = None, 
-        user_id: Optional[str] = None, 
+        db: Optional["AsyncSession"] = None,
+        user_id: Optional[int] = None,
         api_key_id: Optional[int] = None
     ) -> ChatResponse:
         """Create chat completion with security, resilience, and usage recording"""
@@ -369,10 +369,10 @@ class LLMService:
             raise
 
     async def create_chat_completion_stream(
-        self, 
+        self,
         request: ChatRequest,
         db: Optional["AsyncSession"] = None,
-        user_id: Optional[str] = None,
+        user_id: Optional[int] = None,
         api_key_id: Optional[int] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Create streaming chat completion with usage tracking"""
@@ -480,10 +480,10 @@ class LLMService:
             raise
 
     async def create_embedding(
-        self, 
+        self,
         request: EmbeddingRequest,
         db: Optional["AsyncSession"] = None,
-        user_id: Optional[str] = None,
+        user_id: Optional[int] = None,
         api_key_id: Optional[int] = None
     ) -> EmbeddingResponse:
         """Create embeddings with security, resilience and usage recording"""

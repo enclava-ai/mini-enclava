@@ -314,7 +314,7 @@ function DashboardContent() {
                 Use as API base URL in Open WebUI, Continue.dev, etc.
               </div>
               <Button
-                onClick={() => window.open('/api-keys', '_blank')}
+                onClick={() => window.open('/admin/api-keys', '_blank')}
                 variant="outline"
                 size="sm"
                 className="w-full border-empire-gold/20 text-empire-gold hover:bg-empire-gold/10"

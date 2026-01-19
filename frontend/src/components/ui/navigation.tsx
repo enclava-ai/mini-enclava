@@ -74,6 +74,7 @@ const Navigation = () => {
   const settingsChildren = [
     { href: "/settings", label: "System Settings" },
     { href: "/admin/users", label: "Users" },
+    { href: "/admin/api-keys", label: "API Keys" },
   ];
 
   // Core navigation items that are always visible

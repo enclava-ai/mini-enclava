@@ -371,7 +371,7 @@ export function ChatbotManager() {
 
   const handleManageApiKeys = (chatbot: ChatbotInstance) => {
     // Navigate to unified API keys page with chatbot context
-    router.push(`/api-keys?chatbot=${chatbot.id}&chatbot_name=${encodeURIComponent(chatbot.name)}`)
+    router.push(`/admin/api-keys?chatbot=${chatbot.id}&chatbot_name=${encodeURIComponent(chatbot.name)}`)
   }
 
   const getChatbotTypeInfo = (type: string) => {

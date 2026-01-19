@@ -240,7 +240,7 @@ async def create_chat_completion(
 
     try:
         auth_type = context.get("auth_type", "api_key")
-        user_id = str(context.get("user_id")) if context.get("user_id") else None
+        user_id = context.get("user_id")  # Keep as int for database operations
         api_key_id = context.get("api_key_id")
 
         # Handle different authentication types
@@ -526,7 +526,7 @@ async def create_embedding(
 
     try:
         auth_type = context.get("auth_type", "api_key")
-        user_id = str(context.get("user_id")) if context.get("user_id") else None
+        user_id = context.get("user_id")  # Keep as int for database operations
         api_key_id = context.get("api_key_id")
 
         auth_service = APIKeyAuthService(db)

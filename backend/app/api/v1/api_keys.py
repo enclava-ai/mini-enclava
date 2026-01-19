@@ -474,6 +474,10 @@ async def update_api_key(
     await db.commit()
     await db.refresh(api_key)
 
+    # Invalidate API key cache to ensure changes take effect immediately
+    from app.services.cached_api_key import cached_api_key_service
+    await cached_api_key_service.invalidate_api_key_cache(api_key.key_prefix)
+
     # Log audit event
     await log_audit_event(
         db=db,

@@ -618,7 +618,7 @@ export default function UsageTab() {
               Start using the Playground, Chatbot testing, or make API requests to see your usage statistics here.
             </p>
             {!hasApiKeys && (
-              <Button onClick={() => router.push('/api-keys')}>
+              <Button onClick={() => router.push('/admin/api-keys')}>
                 Create API Key
               </Button>
             )}

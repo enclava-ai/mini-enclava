@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         budget_limit_cents: body.budget_limit_cents,
         budget_type: body.budget_type,
         expires_at: body.expires_at || null,
-        scopes: ['api.access']  // Default scope
+        scopes: ['chat.completions', 'embeddings.create', 'models.list']  // Default scopes
       }),
     })
 

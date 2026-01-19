@@ -177,8 +177,9 @@ interface NewApiKeyData {
 }
 
 const PERMISSION_OPTIONS = [
-  { value: "llm:chat", label: "LLM Chat Completions" },
-  { value: "llm:embeddings", label: "LLM Embeddings" },
+  { value: "chat.completions", label: "LLM Chat Completions" },
+  { value: "embeddings.create", label: "LLM Embeddings" },
+  { value: "models.list", label: "List Models" },
 ];
 
 function getErrorMessage(error: any, defaultMessage: string = "An error occurred"): string {

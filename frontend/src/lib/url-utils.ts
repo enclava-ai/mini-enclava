@@ -13,7 +13,7 @@ export const getBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
     // Client-side: detect current protocol
     const protocol = window.location.protocol === 'https:' ? 'https' : 'http'
-    const host = process.env.NEXT_PUBLIC_BASE_URL || window.location.hostname
+    const host = process.env.NEXT_PUBLIC_BASE_URL || window.location.host // Use host (includes port) instead of hostname
     return `${protocol}://${host}`
   }
 
@@ -41,7 +41,7 @@ export const getApiUrl = (): string => {
   if (typeof window !== 'undefined') {
     // Client-side: use the same protocol as the current page
     const protocol = window.location.protocol.slice(0, -1) // Remove ':' from 'https:'
-    const host = window.location.hostname
+    const host = window.location.host // Use host (includes port) instead of hostname
     return `${protocol}://${host}`
   }
 
