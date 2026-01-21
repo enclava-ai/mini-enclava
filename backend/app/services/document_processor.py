@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.models.rag_document import RagDocument
 from app.models.rag_collection import RagCollection
 from app.services.module_manager import module_manager
@@ -42,7 +42,7 @@ class ProcessingTask:
 
     def __post_init__(self):
         if self.created_at is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = utc_now()
 
 
 class DocumentProcessor:
@@ -313,7 +313,7 @@ class DocumentProcessor:
                         "processed": "jsonl",
                     }
                     document.status = ProcessingStatus.PROCESSED
-                    document.processed_at = datetime.now(timezone.utc)
+                    document.processed_at = utc_now()
                     logger.info(
                         f"JSONL document {task.document_id} marked for optimized processing"
                     )
@@ -339,7 +339,7 @@ class DocumentProcessor:
                         document.character_count = len(processed_doc.content)
                         document.document_metadata = processed_doc.metadata
                         document.status = ProcessingStatus.PROCESSED
-                        document.processed_at = datetime.now(timezone.utc)
+                        document.processed_at = utc_now()
                     except asyncio.TimeoutError:
                         logger.error(
                             f"Document processing timed out for document {task.document_id}"
@@ -376,7 +376,7 @@ class DocumentProcessor:
                             import hashlib
 
                             # Calculate file hash
-                            processed_at = datetime.now(timezone.utc)
+                            processed_at = utc_now()
                             file_hash = hashlib.md5(
                                 str(document.id).encode()
                             ).hexdigest()
@@ -433,7 +433,7 @@ class DocumentProcessor:
                             1, len(document.converted_content) // 1000
                         )
                         document.status = ProcessingStatus.INDEXED
-                        document.indexed_at = datetime.now(timezone.utc)
+                        document.indexed_at = utc_now()
 
                         # Update collection stats
                         collection = document.collection
@@ -441,7 +441,7 @@ class DocumentProcessor:
                             collection.document_count += 1
                             collection.size_bytes += document.file_size
                             collection.vector_count += document.vector_count
-                            collection.updated_at = datetime.now(timezone.utc)
+                            collection.updated_at = utc_now()
 
                     except Exception as e:
                         logger.error(

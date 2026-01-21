@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.chatbot import ChatbotInstance
 from app.models.agent_config import AgentConfig
 from app.core.logging import get_logger
+from app.db.database import utc_now
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,35 @@ class UsageStatsService:
             db: Database session
         """
         self.db = db
+
+    def _get_date_range(
+        self,
+        period_days: int,
+        start_date: Optional[datetime],
+        end_date: Optional[datetime],
+    ) -> tuple[datetime, datetime]:
+        """
+        Get date range for queries, ensuring naive datetimes for DB compatibility.
+
+        Args:
+            period_days: Number of days to query if no dates provided
+            start_date: Optional start date
+            end_date: Optional end date
+
+        Returns:
+            Tuple of (start_date, end_date) as naive datetimes
+        """
+        if end_date is None:
+            end_date = utc_now()
+        elif end_date.tzinfo is not None:
+            end_date = end_date.replace(tzinfo=None)
+
+        if start_date is None:
+            start_date = end_date - timedelta(days=period_days)
+        elif start_date.tzinfo is not None:
+            start_date = start_date.replace(tzinfo=None)
+
+        return start_date, end_date
 
     async def get_user_stats(
         self,
@@ -51,11 +81,8 @@ class UsageStatsService:
         Returns:
             Dictionary with summary, by_provider, by_model, by_source, and daily_trend
         """
-        # Determine date range
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
-        if start_date is None:
-            start_date = end_date - timedelta(days=period_days)
+        # Determine date range (naive datetimes for DB compatibility)
+        start_date, end_date = self._get_date_range(period_days, start_date, end_date)
 
         # Build base query - filter by user_id
         base_conditions = [
@@ -231,11 +258,8 @@ class UsageStatsService:
         Returns:
             Dictionary with summary, by_provider, by_model, and daily_trend
         """
-        # Determine date range
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
-        if start_date is None:
-            start_date = end_date - timedelta(days=period_days)
+        # Determine date range (naive datetimes for DB compatibility)
+        start_date, end_date = self._get_date_range(period_days, start_date, end_date)
 
         # Build base query
         base_conditions = [
@@ -340,11 +364,8 @@ class UsageStatsService:
         Returns:
             Dictionary with system-wide statistics
         """
-        # Determine date range
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
-        if start_date is None:
-            start_date = end_date - timedelta(days=period_days)
+        # Determine date range (naive datetimes for DB compatibility)
+        start_date, end_date = self._get_date_range(period_days, start_date, end_date)
 
         # Build base query (no API key filter for system-wide)
         base_conditions = [
@@ -392,11 +413,8 @@ class UsageStatsService:
         Returns:
             Tuple of (users_list, period_start, period_end)
         """
-        # Determine date range
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
-        if start_date is None:
-            start_date = end_date - timedelta(days=period_days)
+        # Determine date range (naive datetimes for DB compatibility)
+        start_date, end_date = self._get_date_range(period_days, start_date, end_date)
 
         # Query top users by total cost
         stmt = (
@@ -469,11 +487,8 @@ class UsageStatsService:
         Returns:
             Tuple of (keys_list, period_start, period_end)
         """
-        # Determine date range
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
-        if start_date is None:
-            start_date = end_date - timedelta(days=period_days)
+        # Determine date range (naive datetimes for DB compatibility)
+        start_date, end_date = self._get_date_range(period_days, start_date, end_date)
 
         # Query top API keys by total cost
         stmt = (
@@ -539,11 +554,8 @@ class UsageStatsService:
         Returns:
             Tuple of (providers, period_start, period_end, total_requests, total_cost)
         """
-        # Determine date range
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
-        if start_date is None:
-            start_date = end_date - timedelta(days=period_days)
+        # Determine date range (naive datetimes for DB compatibility)
+        start_date, end_date = self._get_date_range(period_days, start_date, end_date)
 
         # Query provider stats
         stmt = (
@@ -798,11 +810,8 @@ class UsageStatsService:
         if not chatbot:
             raise ValueError(f"Chatbot not found: {chatbot_id}")
 
-        # Determine date range
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
-        if start_date is None:
-            start_date = end_date - timedelta(days=period_days)
+        # Determine date range (naive datetimes for DB compatibility)
+        start_date, end_date = self._get_date_range(period_days, start_date, end_date)
 
         # Build base query conditions
         base_conditions = [
@@ -862,11 +871,8 @@ class UsageStatsService:
         if not agent_config:
             raise ValueError(f"Agent config not found: {agent_config_id}")
 
-        # Determine date range
-        if end_date is None:
-            end_date = datetime.now(timezone.utc)
-        if start_date is None:
-            start_date = end_date - timedelta(days=period_days)
+        # Determine date range (naive datetimes for DB compatibility)
+        start_date, end_date = self._get_date_range(period_days, start_date, end_date)
 
         # Build base query conditions
         base_conditions = [

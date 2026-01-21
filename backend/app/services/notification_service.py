@@ -27,6 +27,7 @@ from app.models.notification import (
 )
 from app.models.user import User
 from app.core.config import settings
+from app.db.database import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class NotificationService:
         await self.db.refresh(notification)
 
         # Send immediately if not scheduled
-        if scheduled_at is None or scheduled_at <= datetime.now(timezone.utc):
+        if scheduled_at is None or scheduled_at <= utc_now():
             await self._deliver_notification(notification)
 
         return notification
@@ -167,7 +168,7 @@ class NotificationService:
     async def process_scheduled_notifications(self):
         """Process notifications that are scheduled for delivery"""
 
-        now = datetime.now(timezone.utc)
+        now = utc_now()
 
         # Get pending scheduled notifications that are due
         stmt = select(Notification).where(
@@ -206,7 +207,7 @@ class NotificationService:
                 Notification.attempts < Notification.max_attempts,
                 or_(
                     Notification.expires_at.is_(None),
-                    Notification.expires_at > datetime.now(timezone.utc),
+                    Notification.expires_at > utc_now(),
                 ),
             )
         )
@@ -221,7 +222,7 @@ class NotificationService:
                 retry_delay = timedelta(
                     minutes=notification.channel.retry_delay_minutes
                 )
-                if datetime.now(timezone.utc) - notification.failed_at < retry_delay:
+                if utc_now() - notification.failed_at < retry_delay:
                     continue
 
             try:
@@ -542,7 +543,7 @@ class NotificationService:
         status_stats = dict(status_counts.all())
 
         # Recent notifications (last 24h)
-        twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+        twenty_four_hours_ago = utc_now() - timedelta(hours=24)
         recent_notifications = await self.db.execute(
             select(func.count(Notification.id)).where(
                 Notification.created_at >= twenty_four_hours_ago

@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.plugin import Plugin, PluginConfiguration, PluginAuditLog
 from app.models.user import User
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.schemas.plugin_manifest import PluginManifestValidator, validate_manifest_file
 from app.services.plugin_sandbox import plugin_loader
 from app.services.plugin_database import plugin_db_manager, plugin_migration_manager
@@ -445,7 +445,7 @@ class PluginInstaller:
 
             # Update database
             plugin.status = "uninstalled"
-            plugin.updated_at = datetime.now(timezone.utc)
+            plugin.updated_at = utc_now()
 
             # Log uninstall
             audit_log = PluginAuditLog(
@@ -585,7 +585,7 @@ class PluginInstaller:
             existing_plugin.version = new_version
             existing_plugin.description = manifest.metadata.description
             existing_plugin.manifest_data = manifest.dict()
-            existing_plugin.updated_at = datetime.now(timezone.utc)
+            existing_plugin.updated_at = utc_now()
 
             # Log update
             audit_log = PluginAuditLog(

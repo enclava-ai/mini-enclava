@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.models.response import Response
 from app.models.conversation import Conversation
+from app.db.database import utc_now
 from app.models.agent_config import AgentConfig
 from app.schemas.responses import ResponseCreateRequest, ResponseObject, TokenUsage
 from app.services.responses.translator import ItemMessageTranslator
@@ -478,7 +479,7 @@ class ResponsesService:
         """
         try:
             # Calculate TTL
-            expires_at = datetime.now(timezone.utc) + Response.get_default_ttl()
+            expires_at = utc_now() + Response.get_default_ttl()
 
             response = Response(
                 id=response_obj.id,
@@ -498,7 +499,7 @@ class ResponsesService:
                 total_tokens=response_obj.usage.total_tokens,
                 store=True,
                 response_metadata=response_obj.metadata,
-                created_at=datetime.now(timezone.utc),
+                created_at=utc_now(),
                 expires_at=expires_at
             )
 

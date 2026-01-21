@@ -23,7 +23,7 @@ from app.core.security import (
     get_current_user,
     get_current_active_user,
 )
-from app.db.database import get_db, create_default_admin
+from app.db.database import get_db, create_default_admin, utc_now
 from app.models.user import User
 from app.utils.exceptions import AuthenticationError, ValidationError
 
@@ -518,7 +518,7 @@ async def change_password(
 
     # Update password
     user.hashed_password = get_password_hash(password_data.new_password)
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = utc_now()
 
     await db.commit()
 

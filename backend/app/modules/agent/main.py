@@ -23,7 +23,7 @@ from app.models.user import User
 from app.models.agent_config import AgentConfig
 from app.models.agent_conversation import AgentConversation, AgentMessage
 from app.core.security import get_current_user
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.services.api_key_auth import get_api_key_context, get_api_key_auth
 from app.models.api_key import APIKey
 from app.services.usage_recording import UsageRecordingService
@@ -334,8 +334,8 @@ class AgentModule(BaseModule):
             agent_config_id=agent_config_id,
             user_id=str(user_id),
             title="Agent Chat",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
+            created_at=utc_now(),
+            updated_at=utc_now()
         )
         db.add(new_conv)
         await db.commit()
@@ -357,7 +357,7 @@ class AgentModule(BaseModule):
             role=role,
             content=content,
             tool_calls=tool_calls,
-            timestamp=datetime.now(timezone.utc)
+            timestamp=utc_now()
         )
         db.add(msg)
         await db.commit()
@@ -398,8 +398,8 @@ class AgentModule(BaseModule):
             is_public=request.is_public,
             is_template=False,
             created_by_user_id=user_id,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
+            created_at=utc_now(),
+            updated_at=utc_now()
         )
 
         db.add(agent)
@@ -476,7 +476,7 @@ class AgentModule(BaseModule):
         for key, value in update_data.items():
             setattr(config, key, value)
 
-        config.updated_at = datetime.now(timezone.utc)
+        config.updated_at = utc_now()
 
         await db.commit()
         await db.refresh(config)
@@ -661,7 +661,7 @@ class AgentModule(BaseModule):
 
         # Update agent usage
         agent.usage_count += 1
-        agent.last_used_at = datetime.now(timezone.utc)
+        agent.last_used_at = utc_now()
         await db.commit()
 
         # Return OpenAI-compatible response
@@ -883,7 +883,7 @@ class AgentModule(BaseModule):
 
         # Update agent usage
         agent.usage_count += 1
-        agent.last_used_at = datetime.now(timezone.utc)
+        agent.last_used_at = utc_now()
 
         # Get token counts
         prompt_tokens = response.usage.prompt_tokens if response.usage else 0
@@ -1205,7 +1205,7 @@ class AgentModule(BaseModule):
 
             # Update agent usage
             agent.usage_count += 1
-            agent.last_used_at = datetime.now(timezone.utc)
+            agent.last_used_at = utc_now()
 
             # Get token counts
             prompt_tokens = response.usage.prompt_tokens if response.usage else 0

@@ -73,6 +73,7 @@ import tiktoken
 from app.core.config import settings
 from app.core.logging import log_module_event
 from app.services.base_module import BaseModule, Permission
+from app.db.database import utc_now
 
 
 @dataclass
@@ -101,7 +102,7 @@ class ProcessedDocument:
 
     def __post_init__(self):
         if self.created_at is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = utc_now()
 
 
 @dataclass
@@ -128,7 +129,7 @@ class Document:
 
     def __post_init__(self):
         if self.created_at is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = utc_now()
 
 
 @dataclass
@@ -1529,7 +1530,7 @@ class RAGModule(BaseModule):
                 entities=entities,
                 keywords=keywords,
                 processing_time=processing_time,
-                processed_at=datetime.now(timezone.utc),
+                processed_at=utc_now(),
                 file_hash=file_hash,
                 file_size=len(file_data),
             )
@@ -1616,7 +1617,7 @@ class RAGModule(BaseModule):
                     "chunk_index": i,
                     "chunk_count": len(chunks),
                     "content": chunk,
-                    "indexed_at": datetime.now(timezone.utc).isoformat(),
+                    "indexed_at": utc_now().isoformat(),
                 }
 
                 points.append(
@@ -1718,7 +1719,7 @@ class RAGModule(BaseModule):
                     "chunk_index": i,
                     "chunk_count": len(chunks),
                     "content": chunk,
-                    "indexed_at": datetime.now(timezone.utc).isoformat(),
+                    "indexed_at": utc_now().isoformat(),
                 }
 
                 # Add source_url if present in ProcessedDocument

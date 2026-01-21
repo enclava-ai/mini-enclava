@@ -10,7 +10,7 @@ from sqlalchemy import select, update, delete, func
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.models.budget import Budget
 from app.models.user import User
 from app.models.usage_tracking import UsageTracking
@@ -284,7 +284,7 @@ async def create_budget(
         )
 
     # Calculate period start and end
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     period_start, period_end = _calculate_period_bounds(now, budget_data.period_type)
 
     # Create budget
@@ -372,7 +372,7 @@ async def update_budget(
     # Recalculate period if period_type changed
     if "period_type" in update_data:
         period_start, period_end = _calculate_period_bounds(
-            datetime.now(timezone.utc), budget.period_type
+            utc_now(), budget.period_type
         )
         budget.period_start = period_start
         budget.period_end = period_end
@@ -483,7 +483,7 @@ async def get_budget_usage(
     is_exceeded = current_usage > budget.limit_amount
 
     # Calculate days remaining in period
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     days_remaining = max(0, (budget.period_end - now).days)
 
     # Calculate projected usage
@@ -675,7 +675,7 @@ async def _get_usage_history(
 ) -> List[dict]:
     """Get usage history for the budget"""
 
-    end_date = datetime.now(timezone.utc)
+    end_date = utc_now()
     start_date = end_date - timedelta(days=days)
 
     # Build query

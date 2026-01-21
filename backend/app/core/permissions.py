@@ -9,6 +9,7 @@ from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer
 
 from app.models.user import User
+from app.db.database import utc_now
 
 
 security = HTTPBearer()
@@ -41,7 +42,7 @@ def require_permission(
 
     # Check if account is locked
     if user.account_locked:
-        if user.account_locked_until and user.account_locked_until > datetime.now(timezone.utc):
+        if user.account_locked_until and user.account_locked_until > utc_now():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is temporarily locked",

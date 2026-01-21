@@ -24,7 +24,7 @@ from app.models.plugin import (
 )
 from app.models.user import User
 from app.models.api_key import APIKey
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.services.plugin_configuration_service import PluginConfigurationService
 from app.utils.exceptions import SecurityError, PluginError
 
@@ -98,7 +98,7 @@ class PluginTokenManager:
     ) -> str:
         """Generate JWT token for plugin authentication"""
         try:
-            now = datetime.now(timezone.utc)
+            now = utc_now()
             expiration = now + timedelta(hours=expires_hours)
 
             payload = {
@@ -213,7 +213,7 @@ class PluginTokenManager:
                 return False
 
             # Calculate time until token expires
-            now = datetime.now(timezone.utc)
+            now = utc_now()
             if expires_at <= now:
                 # Token already expired, no need to blacklist
                 return True
@@ -467,7 +467,7 @@ class PluginPermissionManager:
                 .filter(
                     # Only include non-expired permissions
                     (PluginPermission.expires_at.is_(None))
-                    | (PluginPermission.expires_at > datetime.now(timezone.utc))
+                    | (PluginPermission.expires_at > utc_now())
                 )
                 .all()
             )

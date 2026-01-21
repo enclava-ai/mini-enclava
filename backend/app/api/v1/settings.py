@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.models.user import User
 from app.core.security import get_current_user
 from app.services.permission_manager import require_permission
@@ -426,7 +426,7 @@ async def get_system_info(
     # Get active users count (last 24 hours)
     from datetime import datetime, timedelta, timezone
 
-    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    yesterday = utc_now() - timedelta(days=1)
     active_users_query = select(User.id).where(User.last_login >= yesterday)
     active_users_result = await db.execute(active_users_query)
     active_users = len(active_users_result.fetchall())

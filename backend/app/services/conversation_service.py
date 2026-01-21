@@ -12,6 +12,7 @@ import logging
 
 from app.models.chatbot import ChatbotConversation, ChatbotMessage, ChatbotInstance
 from app.utils.exceptions import APIException
+from app.db.database import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -53,15 +54,16 @@ class ConversationService:
                 )
 
         # Create new conversation
+        now = utc_now()
         if not title:
-            title = f"Chat {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
+            title = f"Chat {now.strftime('%Y-%m-%d %H:%M')}"
 
         conversation = ChatbotConversation(
             chatbot_id=chatbot_id,
             user_id=user_id,
             title=title,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=now,
+            updated_at=now,
             is_active=True,
             context_data={},
         )
@@ -144,11 +146,12 @@ class ConversationService:
         if role not in ["user", "assistant", "system"]:
             raise ValueError(f"Invalid message role: {role}")
 
+        now = utc_now()
         message = ChatbotMessage(
             conversation_id=conversation_id,
             role=role,
             content=content,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=now,
             message_metadata=metadata or {},
             sources=sources,
         )
@@ -163,7 +166,7 @@ class ConversationService:
         conversation = result.scalar_one_or_none()
 
         if conversation:
-            conversation.updated_at = datetime.now(timezone.utc)
+            conversation.updated_at = now
 
         await self.db.commit()
         await self.db.refresh(message)
@@ -212,7 +215,7 @@ class ConversationService:
     async def archive_old_conversations(self, days_inactive: int = 30) -> int:
         """Archive conversations that haven't been used in specified days"""
 
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_inactive)
+        cutoff_date = utc_now() - timedelta(days=days_inactive)
 
         # Find conversations to archive
         stmt = select(ChatbotConversation).where(

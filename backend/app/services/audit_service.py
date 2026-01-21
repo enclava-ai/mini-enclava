@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from app.models.audit_log import AuditLog
 from app.core.logging import get_logger
+from app.db.database import utc_now
 
 logger = get_logger(__name__)
 
@@ -109,7 +110,7 @@ async def log_audit_event_async(
             "user_agent": user_agent,
             "success": success,
             "severity": severity,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": utc_now(),  # Naive datetime for DB compatibility
         }
 
         # Queue the audit event (non-blocking)
@@ -173,7 +174,7 @@ async def log_audit_event(
             user_agent=user_agent,
             success=success,
             severity=severity,
-            created_at=datetime.now(timezone.utc),
+            created_at=utc_now(),  # Naive datetime for DB compatibility
         )
 
         db.add(audit_log)

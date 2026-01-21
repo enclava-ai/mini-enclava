@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.plugin import Plugin
-from app.db.database import SessionLocal
+from app.db.database import SessionLocal, utc_now
 from app.schemas.plugin_manifest import validate_manifest_file
 from app.services.plugin_database import plugin_db_manager
 from app.services.plugin_sandbox import plugin_loader
@@ -176,7 +176,7 @@ class PluginAutoDiscovery:
                     existing_plugin.package_path = plugin_info["plugin_path"]
                     existing_plugin.manifest_hash = plugin_info["manifest_hash"]
                     existing_plugin.package_hash = plugin_info["package_hash"]
-                    existing_plugin.last_updated_at = datetime.now(timezone.utc)
+                    existing_plugin.last_updated_at = utc_now()
 
                     db.commit()
 

@@ -20,6 +20,7 @@ from app.models.usage_record import UsageRecord
 from app.services.pricing import PricingService
 from app.services.metrics import get_metrics_service
 from app.core.logging import get_logger
+from app.db.database import utc_now
 
 logger = get_logger(__name__)
 
@@ -168,7 +169,7 @@ class UsageRecordingService:
             error_message=error_message[:1000] if error_message else None,  # Truncate long errors
             ip_address=ip_address,
             user_agent=user_agent[:500] if user_agent else None,  # Truncate long user agents
-            created_at=datetime.now(timezone.utc),
+            created_at=utc_now(),  # Naive datetime for DB compatibility
         )
 
         # Add to session

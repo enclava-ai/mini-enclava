@@ -19,6 +19,7 @@ from app.models.budget import Budget
 from app.models.api_key import APIKey
 from app.services.cost_calculator import CostCalculator, estimate_request_cost
 from app.core.logging import get_logger
+from app.db.database import utc_now
 
 logger = get_logger(__name__)
 
@@ -362,7 +363,7 @@ class BudgetEnforcementService:
                     and_(
                         Budget.is_active == True,
                         Budget.auto_renew == True,
-                        Budget.period_end < datetime.now(timezone.utc),
+                        Budget.period_end < utc_now(),
                     )
                 )
                 .all()

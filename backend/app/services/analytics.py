@@ -20,6 +20,7 @@ from app.models.usage_tracking import UsageTracking
 from app.models.api_key import APIKey
 from app.models.budget import Budget
 from app.models.user import User
+from app.db.database import utc_now
 
 logger = get_logger(__name__)
 
@@ -191,7 +192,7 @@ class AnalyticsService:
                 return cached_data
 
         try:
-            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+            cutoff_time = utc_now() - timedelta(hours=hours)
 
             # Build query filters
             filters = [UsageTracking.created_at >= cutoff_time]
@@ -460,7 +461,7 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get detailed cost analysis and trends"""
         try:
-            cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff_time = utc_now() - timedelta(days=days)
 
             # Build query filters
             filters = [UsageTracking.created_at >= cutoff_time]
@@ -532,7 +533,7 @@ class AnalyticsService:
         """Cleanup old events from memory"""
         while self.enabled:
             try:
-                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+                cutoff_time = utc_now() - timedelta(hours=24)
 
                 # Remove old events
                 while self.events and self.events[0].timestamp < cutoff_time:
@@ -669,7 +670,7 @@ class InMemoryAnalyticsService:
                 return cached_data
 
         try:
-            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+            cutoff_time = utc_now() - timedelta(hours=hours)
 
             # Get recent events from memory
             recent_events = [e for e in self.events if e.timestamp >= cutoff_time]
@@ -891,7 +892,7 @@ class InMemoryAnalyticsService:
     ) -> Dict[str, Any]:
         """Get detailed cost analysis and trends"""
         try:
-            cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff_time = utc_now() - timedelta(days=days)
 
             # Get events from memory
             events = [e for e in self.events if e.timestamp >= cutoff_time]
@@ -961,7 +962,7 @@ class InMemoryAnalyticsService:
         """Cleanup old events from memory"""
         while self.enabled:
             try:
-                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+                cutoff_time = utc_now() - timedelta(hours=24)
 
                 # Remove old events
                 while self.events and self.events[0].timestamp < cutoff_time:

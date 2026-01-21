@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.models.rag_collection import RagCollection
 from app.models.rag_document import RagDocument
 from app.utils.exceptions import APIException
+from app.db.database import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ class RAGService:
                         # Collection exists in Qdrant but not in our metadata
                         from datetime import datetime, timezone
 
-                        now = datetime.now(timezone.utc)
+                        now = utc_now()
                         collection_data = {
                             "id": f"ext_{qdrant_name}",  # External identifier
                             "name": qdrant_name,
@@ -262,7 +263,7 @@ class RAGService:
                     # Still add the collection but with minimal info
                     from datetime import datetime, timezone
 
-                    now = datetime.now(timezone.utc)
+                    now = utc_now()
                     collection_data = {
                         "id": f"ext_{qdrant_name}",
                         "name": qdrant_name,
@@ -339,7 +340,7 @@ class RAGService:
             for document in documents:
                 # Soft delete document
                 document.is_deleted = True
-                document.deleted_at = datetime.now(timezone.utc)
+                document.deleted_at = utc_now()
 
                 # Delete physical file if it exists
                 try:
@@ -352,7 +353,7 @@ class RAGService:
 
         # Soft delete collection
         collection.is_active = False
-        collection.updated_at = datetime.now(timezone.utc)
+        collection.updated_at = utc_now()
 
         await self.db.commit()
 
@@ -478,8 +479,8 @@ class RAGService:
 
         # Soft delete document
         document.is_deleted = True
-        document.deleted_at = datetime.now(timezone.utc)
-        document.updated_at = datetime.now(timezone.utc)
+        document.deleted_at = utc_now()
+        document.updated_at = utc_now()
 
         await self.db.commit()
 
@@ -787,7 +788,7 @@ class RAGService:
             collection.document_count = doc_count
             collection.size_bytes = total_size
             collection.vector_count = vector_count
-            collection.updated_at = datetime.now(timezone.utc)
+            collection.updated_at = utc_now()
 
             await self.db.commit()
 
@@ -908,7 +909,7 @@ class RAGService:
                         document.character_count = len(processed_doc.content)
                         document.document_metadata = processed_doc.metadata
                         document.status = "processed"
-                        document.processed_at = datetime.now(timezone.utc)
+                        document.processed_at = utc_now()
 
                         # Index the processed document in the correct Qdrant collection
                         try:
@@ -938,7 +939,7 @@ class RAGService:
                                 1, len(processed_doc.content) // 500
                             )  # ~500 chars per chunk
                             document.status = "indexed"
-                            document.indexed_at = datetime.now(timezone.utc)
+                            document.indexed_at = utc_now()
 
                         except Exception as index_error:
                             logger.error(
@@ -955,7 +956,7 @@ class RAGService:
                             collection.document_count += 1
                             collection.size_bytes += document.file_size
                             collection.vector_count += document.vector_count
-                            collection.updated_at = datetime.now(timezone.utc)
+                            collection.updated_at = utc_now()
 
                     except Exception as e:
                         # Error case - mark document as failed
@@ -1003,7 +1004,7 @@ class RAGService:
             document.processing_error = None
             document.processed_at = None
             document.indexed_at = None
-            document.updated_at = datetime.now(timezone.utc)
+            document.updated_at = utc_now()
 
             await self.db.commit()
 

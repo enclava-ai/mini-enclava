@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.models.user import User
 from app.services.analytics import get_analytics_service
 from app.services.module_manager import module_manager
@@ -147,7 +147,7 @@ async def get_usage_trends(
         from sqlalchemy import func
         from app.models.usage_tracking import UsageTracking
 
-        cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_time = utc_now() - timedelta(days=days)
 
         # Daily usage trends
         daily_usage = (

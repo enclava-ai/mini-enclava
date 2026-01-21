@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.tool import Tool, ToolExecution, ToolCategory, ToolType, ToolStatus
 from app.models.user import User
+from app.db.database import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,7 @@ class ToolManagementService:
         if is_active is not None:
             tool.is_active = is_active
 
-        tool.updated_at = datetime.now(timezone.utc)
+        tool.updated_at = utc_now()
 
         await self.db.commit()
         await self.db.refresh(tool)
@@ -354,7 +355,7 @@ class ToolManagementService:
             )
 
         tool.is_approved = True
-        tool.updated_at = datetime.now(timezone.utc)
+        tool.updated_at = utc_now()
 
         await self.db.commit()
         await self.db.refresh(tool)
@@ -440,7 +441,7 @@ class ToolManagementService:
         stats["executions_by_status"] = dict(executions_by_status.all())
 
         # Recent executions (last 24h)
-        twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+        twenty_four_hours_ago = utc_now() - timedelta(hours=24)
         recent_executions = await self.db.execute(
             select(func.count(ToolExecution.id)).where(
                 ToolExecution.created_at >= twenty_four_hours_ago

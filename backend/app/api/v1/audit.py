@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from datetime import datetime, timedelta, timezone
 
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.core.security import get_current_user
@@ -279,7 +279,7 @@ async def get_audit_statistics(
 
     # Default to last 30 days if no dates provided
     if not end_date:
-        end_date = datetime.now(timezone.utc)
+        end_date = utc_now()
     if not start_date:
         start_date = end_date - timedelta(days=30)
 
@@ -377,7 +377,7 @@ async def get_security_events(
     # Check permissions
     require_permission(current_user.get("permissions", []), "platform:audit:read")
 
-    end_time = datetime.now(timezone.utc)
+    end_time = utc_now()
     start_time = end_time - timedelta(hours=hours)
 
     # Failed logins
@@ -529,7 +529,7 @@ async def export_audit_logs(
 
     # Default to last 30 days if no dates provided
     if not end_date:
-        end_date = datetime.now(timezone.utc)
+        end_date = utc_now()
     if not start_date:
         start_date = end_date - timedelta(days=30)
 

@@ -15,6 +15,7 @@ from app.models.plugin import Plugin, PluginConfiguration
 from app.models.user import User
 from app.core.config import settings
 from app.utils.exceptions import APIException
+from app.db.database import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -130,14 +131,14 @@ class PluginConfigurationService:
                     config.config_data = {}
 
                 config.config_data[config_key] = config_value
-                config.updated_at = datetime.now(timezone.utc)
+                config.updated_at = utc_now()
 
                 # Use update to ensure proper JSON serialization
                 stmt = (
                     update(PluginConfiguration)
                     .where(PluginConfiguration.id == config.id)
                     .values(
-                        config_data=config.config_data, updated_at=datetime.now(timezone.utc)
+                        config_data=config.config_data, updated_at=utc_now()
                     )
                 )
                 await self.db.execute(stmt)
@@ -221,13 +222,13 @@ class PluginConfigurationService:
                     config.config_data = {}
 
                 config.config_data.update(config_data)
-                config.updated_at = datetime.now(timezone.utc)
+                config.updated_at = utc_now()
 
                 stmt = (
                     update(PluginConfiguration)
                     .where(PluginConfiguration.id == config.id)
                     .values(
-                        config_data=config.config_data, updated_at=datetime.now(timezone.utc)
+                        config_data=config.config_data, updated_at=utc_now()
                     )
                 )
                 await self.db.execute(stmt)
@@ -282,13 +283,13 @@ class PluginConfigurationService:
             if config and config.config_data and config_key in config.config_data:
                 # Remove the key from config_data
                 del config.config_data[config_key]
-                config.updated_at = datetime.now(timezone.utc)
+                config.updated_at = utc_now()
 
                 stmt = (
                     update(PluginConfiguration)
                     .where(PluginConfiguration.id == config.id)
                     .values(
-                        config_data=config.config_data, updated_at=datetime.now(timezone.utc)
+                        config_data=config.config_data, updated_at=utc_now()
                     )
                 )
                 await self.db.execute(stmt)

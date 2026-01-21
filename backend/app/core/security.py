@@ -16,7 +16,7 @@ from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.utils.exceptions import AuthenticationError, AuthorizationError
 
 logger = logging.getLogger(__name__)
@@ -413,7 +413,7 @@ async def get_api_key_user(
             return None
 
         # Update last used timestamp
-        db_api_key.last_used_at = datetime.now(timezone.utc)
+        db_api_key.last_used_at = utc_now()
         await db.commit()
 
         # Load associated user

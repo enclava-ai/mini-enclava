@@ -397,9 +397,13 @@ class LLMService:
 
         # Execute streaming with resilience
         resilience_manager = ResilienceManagerFactory.get_manager(provider_name)
-        
+
+        # Estimate input tokens for providers that don't include usage in streaming chunks
+        # This ensures accurate billing/budget tracking for streaming workloads
+        estimated_input_tokens = self._estimate_input_tokens(request)
+
         # Setup streaming tracker if DB session is available
-        tracker = StreamingTokenTracker(request.model)
+        tracker = StreamingTokenTracker(request.model, estimated_input_tokens=estimated_input_tokens)
         recorder = None
         
         if db:
@@ -667,6 +671,37 @@ class LLMService:
             "metrics": {"status": "disabled"},
             "resilience": resilience_health,
         }
+
+    def _estimate_input_tokens(self, request: ChatRequest) -> int:
+        """
+        Estimate input tokens from request messages for streaming tracking.
+
+        Uses a word-based estimation with 1.3 tokens per word multiplier,
+        consistent with other parts of the codebase.
+
+        Args:
+            request: The chat request containing messages
+
+        Returns:
+            Estimated input token count
+        """
+        if not request.messages:
+            return 0
+
+        # Concatenate all message content
+        total_content = ""
+        for msg in request.messages:
+            if msg.content:
+                total_content += msg.content + " "
+            # Account for role tokens
+            total_content += msg.role + " "
+
+        # Word-based estimation: ~1.3 tokens per word (consistent with api/v1/llm.py)
+        word_count = len(total_content.split())
+        estimated = int(word_count * 1.3)
+
+        logger.debug(f"Estimated {estimated} input tokens from {word_count} words")
+        return estimated
 
     async def get_provider_for_model(self, model: str) -> str:
         """

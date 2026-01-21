@@ -14,6 +14,7 @@ from app.models.user import User
 from app.models.role import Role, RoleLevel
 from app.models.audit_log import AuditLog, AuditAction, AuditSeverity
 from app.core.security import create_access_token, get_password_hash
+from app.db.database import utc_now
 from pydantic import EmailStr
 
 
@@ -123,7 +124,7 @@ class UserManagementService:
         if user.account_locked:
             if (
                 user.account_locked_until
-                and user.account_locked_until > datetime.now(timezone.utc)
+                and user.account_locked_until > utc_now()
             ):
                 return None  # Account is still locked
             else:
@@ -270,7 +271,7 @@ class UserManagementService:
         if is_verified is not None:
             user.is_verified = is_verified
 
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = utc_now()
         await self.db.commit()
         await self.db.refresh(user, ["role"])
 
@@ -303,7 +304,7 @@ class UserManagementService:
 
         # Hash and set new password
         user.hashed_password = get_password_hash(new_password)
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = utc_now()
 
         # If user is changing their own password and was forced to change it, clear the flag
         if not is_admin_reset and user.force_password_change:
@@ -333,7 +334,7 @@ class UserManagementService:
         old_password_hash = user.hashed_password
         user.hashed_password = get_password_hash(new_password)
         user.force_password_change = force_change_on_login
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = utc_now()
 
         await self.db.commit()
         await self.db.refresh(user)
@@ -372,7 +373,7 @@ class UserManagementService:
             user.is_active = False
             user.email = f"deleted_{user_id}_{user.email}"
             user.username = f"deleted_{user_id}_{user.username}"
-            user.updated_at = datetime.now(timezone.utc)
+            user.updated_at = utc_now()
 
         await self.db.commit()
         return True
@@ -538,7 +539,7 @@ class UserManagementService:
         if is_active is not None:
             role.is_active = is_active
 
-        role.updated_at = datetime.now(timezone.utc)
+        role.updated_at = utc_now()
         await self.db.commit()
         await self.db.refresh(role)
 
@@ -597,7 +598,7 @@ class UserManagementService:
             )
 
         user.role_id = role_id
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = utc_now()
 
         await self.db.commit()
         await self.db.refresh(user)
@@ -614,7 +615,7 @@ class UserManagementService:
             )
 
         user.role_id = None
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = utc_now()
 
         await self.db.commit()
         await self.db.refresh(user)
@@ -645,7 +646,7 @@ class UserManagementService:
         )
 
         # Recent registrations (last 30 days)
-        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        thirty_days_ago = utc_now() - timedelta(days=30)
         recent_registrations = await self.db.execute(
             select(func.count(User.id)).where(User.created_at >= thirty_days_ago)
         )

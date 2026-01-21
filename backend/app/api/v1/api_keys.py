@@ -12,7 +12,7 @@ import asyncio
 import secrets
 import string
 
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.models.api_key import APIKey
 from app.models.user import User
 from app.core.security import get_current_user
@@ -649,7 +649,7 @@ async def get_api_key_usage(
     # Calculate usage statistics
     from app.models.usage_tracking import UsageTracking
 
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     hour_start = now.replace(minute=0, second=0, microsecond=0)
 

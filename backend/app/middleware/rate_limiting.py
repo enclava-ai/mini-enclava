@@ -20,6 +20,8 @@ from starlette.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.cache import core_cache
+from app.core.security import verify_token
+from app.utils.exceptions import AuthenticationError
 
 logger = logging.getLogger(__name__)
 
@@ -286,19 +288,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[7:]
             if token.startswith("eyJ"):
-                # JWT token - extract user ID if possible
+                # JWT token - MUST validate signature before exempting from rate limits
+                # SECURITY FIX: Previously this just decoded without verification,
+                # allowing fake JWT-like tokens to bypass rate limiting
                 try:
-                    import base64
-                    import json
-                    # Decode JWT payload (not verifying, just for rate limit ID)
-                    payload_b64 = token.split(".")[1]
-                    # Add padding if needed
-                    payload_b64 += "=" * (4 - len(payload_b64) % 4)
-                    payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+                    payload = verify_token(token)
                     user_id = payload.get("sub")
                     if user_id:
                         return f"user:{user_id}", True, False
-                except Exception:
+                except (AuthenticationError, Exception):
+                    # Invalid JWT - fall through to IP-based rate limiting
+                    # Do NOT treat as API key (they might be testing for bypass)
+                    logger.debug("Invalid JWT token in Authorization header, using IP-based rate limiting")
                     pass
             elif len(token) >= 8:
                 # API key in Bearer header

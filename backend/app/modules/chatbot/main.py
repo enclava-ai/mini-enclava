@@ -37,7 +37,7 @@ from app.models.chatbot import (
     ChatbotAnalytics,
 )
 from app.core.security import get_current_user
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.core.config import settings
 
 # Import protocols for type hints and dependency injection
@@ -584,7 +584,7 @@ class ChatbotModule(BaseModule):
                 db.refresh(assistant_message)
 
             # Update conversation timestamp
-            conversation.updated_at = datetime.now(timezone.utc)
+            conversation.updated_at = utc_now()
             db.commit()
 
             return ChatResponse(
@@ -1282,7 +1282,7 @@ class ChatbotModule(BaseModule):
                         conversation_id=0,
                         role="user",
                         content=message,
-                        timestamp=datetime.now(timezone.utc),
+                        timestamp=utc_now(),
                         metadata={},
                     )
                 ]
