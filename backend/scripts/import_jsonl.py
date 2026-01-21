@@ -18,7 +18,7 @@ Notes:
 import argparse
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 async def import_jsonl(collection_name: str, file_path: str):
@@ -64,7 +64,7 @@ async def import_jsonl(collection_name: str, file_path: str):
         filename=os.path.basename(file_path),
         metadata={
             "source": "jsonl_upload",
-            "upload_date": datetime.utcnow().isoformat(),
+            "upload_date": datetime.now(timezone.utc).isoformat(),
             "file_path": os.path.abspath(file_path),
         },
     )

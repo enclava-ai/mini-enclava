@@ -2,7 +2,7 @@
 Agent Configuration model for pre-configured agents with tool sets
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     Integer,
@@ -15,7 +15,7 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class AgentConfig(Base):
@@ -84,8 +84,8 @@ class AgentConfig(Base):
     is_active = Column(Boolean, default=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     created_by = relationship("User", back_populates="created_agent_configs", foreign_keys=[created_by_user_id])

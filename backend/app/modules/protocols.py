@@ -6,7 +6,7 @@ Using Python protocols provides compile-time type checking with zero runtime ove
 """
 
 from typing import Protocol, Dict, List, Any, Optional, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from abc import abstractmethod
 
 

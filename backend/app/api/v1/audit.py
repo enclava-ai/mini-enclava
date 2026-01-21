@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.db.database import get_db
 from app.models.audit_log import AuditLog
@@ -279,7 +279,7 @@ async def get_audit_statistics(
 
     # Default to last 30 days if no dates provided
     if not end_date:
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
     if not start_date:
         start_date = end_date - timedelta(days=30)
 
@@ -377,7 +377,7 @@ async def get_security_events(
     # Check permissions
     require_permission(current_user.get("permissions", []), "platform:audit:read")
 
-    end_time = datetime.utcnow()
+    end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(hours=hours)
 
     # Failed logins
@@ -529,7 +529,7 @@ async def export_audit_logs(
 
     # Default to last 30 days if no dates provided
     if not end_date:
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
     if not start_date:
         start_date = end_date - timedelta(days=30)
 

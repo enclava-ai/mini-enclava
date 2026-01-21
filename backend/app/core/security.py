@@ -5,7 +5,7 @@ Security utilities for authentication and authorization
 import asyncio
 import concurrent.futures
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID
 
@@ -77,6 +77,16 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def password_needs_rehash(hashed_password: str) -> bool:
+    """
+    Check if password needs to be rehashed due to lower cost factor.
+
+    Security mitigation #28: Rehash passwords on login if they were hashed
+    with a lower bcrypt cost factor than the current setting.
+    """
+    return pwd_context.needs_update(hashed_password)
+
+
 def verify_api_key(plain_api_key: str, hashed_api_key: str) -> bool:
     """Verify an API key against its hash"""
     return pwd_context.verify(plain_api_key, hashed_api_key)
@@ -99,9 +109,9 @@ def create_access_token(
     try:
         to_encode = data.copy()
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = datetime.now(timezone.utc) + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(
+            expire = datetime.now(timezone.utc) + timedelta(
                 minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
             )
 
@@ -120,7 +130,7 @@ def create_access_token(
         # Log token creation details
         logger.debug(f"Created access token for user {data.get('sub')}")
         logger.debug(f"Token expires at: {expire.isoformat()} (UTC)")
-        logger.debug(f"Current UTC time: {datetime.utcnow().isoformat()}")
+        logger.debug(f"Current UTC time: {datetime.now(timezone.utc).isoformat()}")
         logger.debug(
             f"ACCESS_TOKEN_EXPIRE_MINUTES setting: {settings.ACCESS_TOKEN_EXPIRE_MINUTES}"
         )
@@ -138,24 +148,63 @@ def create_access_token(
         raise
 
 
-def create_refresh_token(data: Dict[str, Any]) -> str:
-    """Create JWT refresh token"""
+def create_refresh_token(data: Dict[str, Any], jti: Optional[str] = None) -> tuple:
+    """
+    Create JWT refresh token with unique identifier.
+
+    Security mitigation #5, #45: Tokens include JTI for rotation and revocation.
+
+    Args:
+        data: Token payload data
+        jti: Optional JWT ID (generated if not provided)
+
+    Returns:
+        Tuple of (encoded_jwt, jti)
+    """
+    import secrets
+
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(
+    expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES
     )
-    to_encode.update({"exp": expire})
+
+    # Generate unique token ID if not provided
+    if jti is None:
+        jti = secrets.token_urlsafe(32)
+
+    to_encode.update({
+        "exp": expire,
+        "jti": jti,
+        "iat": datetime.now(timezone.utc),  # Issued at time for revocation checks
+    })
+
     encoded_jwt = jwt.encode(
         to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
     )
-    return encoded_jwt
+    return encoded_jwt, jti
 
 
 def verify_token(token: str) -> Dict[str, Any]:
-    """Verify JWT token and return payload"""
+    """
+    Verify JWT token and return payload.
+
+    Security mitigation #30: Only allow safe algorithms from allowlist.
+    """
+    # SECURITY FIX #30: Strict algorithm allowlist
+    # Prevent algorithm confusion attacks by explicitly allowing only safe algorithms
+    ALLOWED_ALGORITHMS = ["HS256", "HS384", "HS512"]
+
+    # Verify configured algorithm is in allowlist
+    if settings.JWT_ALGORITHM not in ALLOWED_ALGORITHMS:
+        logger.error(
+            f"JWT_ALGORITHM '{settings.JWT_ALGORITHM}' is not in allowlist. "
+            f"Allowed algorithms: {ALLOWED_ALGORITHMS}"
+        )
+        raise AuthenticationError("Server configuration error")
+
     try:
         # Log current time before verification
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc)
         logger.debug(f"Verifying token at: {current_time.isoformat()} (UTC)")
 
         # Decode without verification first to check expiration
@@ -168,19 +217,33 @@ def verify_token(token: str) -> Dict[str, Any]:
                 logger.debug(
                     f"Time until expiration: {(exp_datetime - current_time).total_seconds()} seconds"
                 )
+
+            # SECURITY: Check for 'none' algorithm attack
+            unverified_header = jwt.get_unverified_header(token)
+            token_alg = unverified_header.get("alg", "").lower()
+            if token_alg == "none" or token_alg not in [a.lower() for a in ALLOWED_ALGORITHMS]:
+                logger.warning(f"Token uses disallowed algorithm: {token_alg}")
+                raise AuthenticationError("Invalid token algorithm")
+
+        except AuthenticationError:
+            raise
         except Exception as decode_error:
             logger.debug(
                 f"Could not decode token for expiration check: {decode_error}"
             )
 
+        # Verify with strict algorithm enforcement
         payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],  # Only allow configured algorithm
+            options={"require": ["exp", "sub"]}  # Require essential claims
         )
         logger.debug(f"Token verified successfully for user {payload.get('sub')}")
         return payload
     except JWTError as e:
         logger.warning(f"Token verification failed: {e}")
-        logger.warning(f"Current UTC time: {datetime.utcnow().isoformat()}")
+        logger.warning(f"Current UTC time: {datetime.now(timezone.utc).isoformat()}")
         raise AuthenticationError("Invalid token")
 
 
@@ -191,7 +254,7 @@ async def get_current_user(
     """Get current user from JWT token"""
     try:
         # Log server time for debugging clock sync issues
-        server_time = datetime.utcnow()
+        server_time = datetime.now(timezone.utc)
         logger.debug(f"get_current_user called at: {server_time.isoformat()} (UTC)")
 
         payload = verify_token(credentials.credentials)
@@ -350,7 +413,7 @@ async def get_api_key_user(
             return None
 
         # Update last used timestamp
-        db_api_key.last_used_at = datetime.utcnow()
+        db_api_key.last_used_at = datetime.now(timezone.utc)
         await db.commit()
 
         # Load associated user

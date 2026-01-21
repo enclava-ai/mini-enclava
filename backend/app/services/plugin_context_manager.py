@@ -3,7 +3,7 @@ Plugin Context Manager
 Standardized plugin context management for single-tenant deployments
 """
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 import uuid
 import logging
@@ -28,7 +28,7 @@ class PluginContextManager:
             "plugin_id": plugin_id,
             "user_id": user_id,
             "session_type": session_type,  # interactive, api, scheduled
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "capabilities": self._get_plugin_capabilities(plugin_id),
             "resource_limits": self._get_resource_limits(plugin_id),
             "audit_trail": [],
@@ -60,7 +60,7 @@ class PluginContextManager:
         """Add entry to context audit trail"""
         if context_id in self.active_contexts:
             audit_entry = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "action": action,
                 "details": details,
             }
@@ -150,7 +150,7 @@ class PluginContextManager:
             "unique_plugins": len(plugins),
             "unique_users": len(users),
             "session_types": session_types,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     def _get_plugin_capabilities(self, plugin_id: str) -> List[str]:

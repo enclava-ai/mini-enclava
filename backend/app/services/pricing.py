@@ -15,7 +15,7 @@ Phase 2 Update: Added database pricing lookup with automatic fallback to static 
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict
 
 import re
@@ -133,7 +133,7 @@ class PricingService:
         self._static_pricing = STATIC_PRICING
         self._default_pricing = DEFAULT_PRICING
         # Timestamp for static pricing (service start time)
-        self._static_effective_from = datetime.utcnow()
+        self._static_effective_from = datetime.now(timezone.utc)
 
     async def get_pricing(
         self,

@@ -13,7 +13,7 @@ Extends existing budget tests with comprehensive coverage:
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch, AsyncMock
 from app.services.budget_enforcement import BudgetEnforcementService
@@ -50,7 +50,7 @@ class TestBudgetEnforcementExtended:
             key_prefix="ce_test",
             hashed_key="hashed_test_key",
             is_active=True,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
     
     @pytest.fixture
@@ -63,7 +63,7 @@ class TestBudgetEnforcementExtended:
             current_usage=Decimal("25.50"),
             reset_day=1,
             is_active=True,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
     
     @pytest.fixture
@@ -348,7 +348,7 @@ class TestBudgetEnforcementExtended:
     async def test_expired_budget_handling(self, budget_service, sample_budget):
         """Test handling of expired budgets"""
         # Set budget as expired
-        sample_budget.expires_at = datetime.utcnow() - timedelta(days=1)
+        sample_budget.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
         sample_budget.is_active = True
         
         with patch.object(budget_service, 'db_session', return_value=Mock()) as mock_session:
@@ -365,7 +365,7 @@ class TestBudgetEnforcementExtended:
     @pytest.mark.asyncio
     async def test_budget_auto_deactivation_on_expiry(self, budget_service, sample_budget):
         """Test automatic budget deactivation when expired"""
-        sample_budget.expires_at = datetime.utcnow() - timedelta(hours=1)
+        sample_budget.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
         sample_budget.is_active = True
         
         with patch.object(budget_service, 'db_session', return_value=Mock()) as mock_session:
@@ -382,7 +382,7 @@ class TestBudgetEnforcementExtended:
     async def test_budget_grace_period(self, budget_service, sample_budget):
         """Test budget grace period handling"""
         # Budget expired 30 minutes ago, but has 1-hour grace period
-        sample_budget.expires_at = datetime.utcnow() - timedelta(minutes=30)
+        sample_budget.expires_at = datetime.now(timezone.utc) - timedelta(minutes=30)
         sample_budget.grace_period_hours = 1
         sample_budget.is_active = True
         

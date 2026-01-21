@@ -17,7 +17,8 @@ import hmac
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.core.security import verify_jwt_token, get_current_user
+# SECURITY FIX #13: Fixed import error - verify_jwt_token doesn't exist, use verify_token
+from app.core.security import verify_token, get_current_user
 from app.models.plugin import Plugin, PluginConfiguration, PluginAuditLog
 from app.models.api_key import APIKey
 from app.models.user import User

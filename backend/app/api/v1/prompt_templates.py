@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from sqlalchemy.dialects.postgresql import insert
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from app.db.database import get_db
@@ -198,7 +198,7 @@ async def update_prompt_template(
                 system_prompt=request.system_prompt,
                 is_active=request.is_active,
                 version=template.version + 1,
-                updated_at=datetime.utcnow(),
+                updated_at=datetime.now(timezone.utc),
             )
         )
 
@@ -275,8 +275,8 @@ async def create_prompt_template(
             is_default=False,
             is_active=request.is_active,
             version=1,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
 
         db.add(template)
@@ -385,7 +385,7 @@ async def reset_prompt_template(
             .values(
                 system_prompt=default_prompts[type_key],
                 version=PromptTemplate.version + 1,
-                updated_at=datetime.utcnow(),
+                updated_at=datetime.now(timezone.utc),
             )
         )
 
@@ -554,7 +554,7 @@ async def seed_default_templates(
                     existing_template.name = template_data["name"]
                     existing_template.description = template_data["description"]
                     existing_template.system_prompt = template_data["prompt"]
-                    existing_template.updated_at = datetime.utcnow()
+                    existing_template.updated_at = datetime.now(timezone.utc)
                     updated_templates.append(type_key)
             else:
                 # Check if any inactive template exists with this type_key
@@ -573,11 +573,11 @@ async def seed_default_templates(
                     inactive_template.system_prompt = template_data["prompt"]
                     inactive_template.is_default = True
                     inactive_template.version = 1
-                    inactive_template.updated_at = datetime.utcnow()
+                    inactive_template.updated_at = datetime.now(timezone.utc)
                     updated_templates.append(type_key)
                 else:
                     # Create new template, gracefully skipping if another request created it first
-                    now = datetime.utcnow()
+                    now = datetime.now(timezone.utc)
                     stmt = (
                         insert(PromptTemplate)
                         .values(

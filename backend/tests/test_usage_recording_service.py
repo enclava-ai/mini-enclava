@@ -11,7 +11,7 @@ Tests cover:
 """
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from app.services.usage_recording import UsageRecordingService, get_usage_recording_service
@@ -521,7 +521,7 @@ class TestUsageRecordModel:
     @pytest.mark.unit
     def test_usage_record_to_dict(self):
         """Test converting record to dictionary."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         request_id = uuid4()
 
         record = UsageRecord()

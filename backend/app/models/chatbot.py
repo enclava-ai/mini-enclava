@@ -14,10 +14,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class ChatbotInstance(Base):
@@ -34,8 +34,8 @@ class ChatbotInstance(Base):
 
     # Metadata
     created_by = Column(String, nullable=False)  # User ID
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     is_active = Column(Boolean, default=True)
 
     # Provider Preferences (Added in migration 022)
@@ -62,8 +62,8 @@ class ChatbotConversation(Base):
 
     # Conversation metadata
     title = Column(String(255))  # Auto-generated or user-defined title
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     is_active = Column(Boolean, default=True)
 
     # Conversation context and settings
@@ -99,7 +99,7 @@ class ChatbotMessage(Base):
     tool_name = Column(String(100), nullable=True)  # Which tool was called
 
     # Metadata
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=utc_now)
     message_metadata = Column(JSON, default=dict)  # Token counts, model used, etc.
 
     # RAG sources if applicable
@@ -136,7 +136,7 @@ class ChatbotAnalytics(Base):
     model_used = Column(String(100))
     rag_used = Column(Boolean, default=False)
 
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=utc_now)
 
     def __repr__(self):
         return f"<ChatbotAnalytics(id={self.id}, event_type='{self.event_type}')>"

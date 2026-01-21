@@ -6,7 +6,7 @@ from ~60ms to ~5ms by avoiding expensive bcrypt operations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -51,6 +51,23 @@ class CachedAPIKeyService:
                 # Recreate APIKey object from cached data
                 api_key_data = cached_data.get("api_key_data", {})
                 user_data = cached_data.get("user_data", {})
+
+                # SECURITY FIX #8: Check deleted_at even for cached data
+                # This is a defense-in-depth measure in case cache invalidation fails
+                if api_key_data.get("deleted_at"):
+                    logger.warning(
+                        f"Cached API key is soft-deleted, invalidating cache: {key_prefix}"
+                    )
+                    await self.invalidate_api_key_cache(key_prefix)
+                    return None
+
+                # Also verify the key is still active
+                if not api_key_data.get("is_active", True):
+                    logger.warning(
+                        f"Cached API key is inactive, invalidating cache: {key_prefix}"
+                    )
+                    await self.invalidate_api_key_cache(key_prefix)
+                    return None
 
                 # Create APIKey instance
                 api_key = APIKey(**api_key_data)
@@ -164,7 +181,7 @@ class CachedAPIKeyService:
                     if user.last_login
                     else None,
                 },
-                "cached_at": datetime.utcnow().isoformat(),
+                "cached_at": datetime.now(timezone.utc).isoformat(),
             }
 
             await core_cache.cache_api_key(key_prefix, cache_data, self.cache_ttl)
@@ -189,7 +206,7 @@ class CachedAPIKeyService:
                 cached_timestamp = datetime.fromisoformat(
                     cached_verification["timestamp"]
                 )
-                if datetime.utcnow() - cached_timestamp < timedelta(
+                if datetime.now(timezone.utc) - cached_timestamp < timedelta(
                     seconds=self.verification_cache_ttl
                 ):
                     logger.debug(
@@ -236,34 +253,74 @@ class CachedAPIKeyService:
             logger.error(f"Error invalidating cache for prefix {key_prefix}: {e}")
 
     async def update_last_used(self, api_key_id: int, db: AsyncSession):
-        """Update last used timestamp asynchronously for performance"""
+        """
+        Update last used timestamp with improved reliability.
+
+        SECURITY FIX #34: Improved last_used tracking
+        - Always cache the latest timestamp for accurate reporting
+        - Only write to DB periodically (every 5 minutes) to avoid spam
+        - Cache stores accurate timestamp even between DB writes
+        """
         try:
-            # Use core cache to track update requests to avoid database spam
-            cache_key = f"last_used_update:{api_key_id}"
+            now = datetime.now(timezone.utc)
+            now_iso = now.isoformat()
 
-            # Check if we recently updated (within 5 minutes)
-            last_update = await core_cache.get(cache_key, prefix="perf")
-            if last_update:
-                return  # Skip update if recent
+            # Always update the cached timestamp for accurate reporting
+            timestamp_cache_key = f"last_used_ts:{api_key_id}"
+            await core_cache.set(
+                timestamp_cache_key, now_iso, ttl=86400, prefix="perf"  # 24h TTL
+            )
 
-            # Update database
+            # Check if we need to persist to database (throttle DB writes)
+            db_update_key = f"last_used_db_update:{api_key_id}"
+            last_db_update = await core_cache.get(db_update_key, prefix="perf")
+
+            if last_db_update:
+                # DB was updated recently, skip write but cached timestamp is current
+                logger.debug(
+                    f"Cached last_used_at for API key {api_key_id}, DB update throttled"
+                )
+                return
+
+            # Time to persist to database
             stmt = select(APIKey).where(APIKey.id == api_key_id)
             result = await db.execute(stmt)
             api_key = result.scalar_one_or_none()
 
             if api_key:
-                api_key.last_used_at = datetime.utcnow()
+                api_key.last_used_at = now
                 await db.commit()
 
-                # Cache that we updated to prevent spam
+                # Mark that we've updated DB recently (5 min throttle for DB writes only)
                 await core_cache.set(
-                    cache_key, datetime.utcnow().isoformat(), ttl=300, prefix="perf"
+                    db_update_key, now_iso, ttl=300, prefix="perf"
                 )
 
-                logger.debug(f"Updated last_used_at for API key {api_key_id}")
+                logger.debug(f"Persisted last_used_at to DB for API key {api_key_id}")
 
         except Exception as e:
             logger.error(f"Error updating last_used for API key {api_key_id}: {e}")
+
+    async def get_last_used(self, api_key_id: int) -> Optional[datetime]:
+        """
+        Get the most recent last_used timestamp.
+
+        Checks cache first for the most accurate timestamp,
+        falls back to database if not cached.
+        """
+        try:
+            # Check cache first for most recent timestamp
+            timestamp_cache_key = f"last_used_ts:{api_key_id}"
+            cached_ts = await core_cache.get(timestamp_cache_key, prefix="perf")
+
+            if cached_ts:
+                return datetime.fromisoformat(cached_ts)
+
+            return None  # Caller should use DB value if needed
+
+        except Exception as e:
+            logger.error(f"Error getting last_used for API key {api_key_id}: {e}")
+            return None
 
     async def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache performance statistics"""

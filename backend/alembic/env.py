@@ -40,8 +40,15 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-# Get database URL from environment
-database_url = os.getenv("DATABASE_URL", "postgresql://empire:empire123@localhost:5432/empire")
+# SECURITY FIX #11: Remove hardcoded credentials - require DATABASE_URL to be set
+# Get database URL from environment (no fallback for security)
+database_url = os.getenv("DATABASE_URL")
+if not database_url:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is required but not set. "
+        "Please set DATABASE_URL before running migrations. "
+        "Example: DATABASE_URL=postgresql://user:password@host:5432/dbname"
+    )
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

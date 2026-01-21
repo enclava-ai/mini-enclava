@@ -6,7 +6,7 @@ These models support:
 - PricingAuditLog: Audit trail for all pricing changes
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID
 
@@ -23,7 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class ProviderPricing(Base):
@@ -69,12 +69,12 @@ class ProviderPricing(Base):
     quantization = Column(String(20), nullable=True)  # e.g., 'fp16', 'int8'
 
     # Validity period
-    effective_from = Column(DateTime, nullable=False, default=datetime.utcnow)
+    effective_from = Column(DateTime, nullable=False, default=utc_now)
     effective_until = Column(DateTime, nullable=True)  # NULL = current pricing
 
     # Timestamps
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
     # Relationships
     override_by_user = relationship("User", foreign_keys=[override_by_user_id])
@@ -159,8 +159,8 @@ class ProviderPricing(Base):
 
     def expire(self) -> None:
         """Mark this pricing as expired (no longer current)"""
-        self.effective_until = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.effective_until = utc_now()
+        self.updated_at = utc_now()
 
     @classmethod
     def create_from_api_sync(
@@ -190,7 +190,7 @@ class ProviderPricing(Base):
             context_length=context_length,
             architecture=architecture,
             quantization=quantization,
-            effective_from=datetime.utcnow(),
+            effective_from=utc_now(),
         )
 
     @classmethod
@@ -217,7 +217,7 @@ class ProviderPricing(Base):
             is_override=True,
             override_reason=reason,
             override_by_user_id=user_id,
-            effective_from=datetime.utcnow(),
+            effective_from=utc_now(),
         )
 
 
@@ -261,7 +261,7 @@ class PricingAuditLog(Base):
     api_response_snapshot = Column(JSONB, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
 
     # Relationships
     changed_by_user = relationship("User", foreign_keys=[changed_by_user_id])

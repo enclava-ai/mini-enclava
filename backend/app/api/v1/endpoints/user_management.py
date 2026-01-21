@@ -4,7 +4,7 @@ Admin endpoints for managing users, roles, and audit logs
 """
 import logging
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer
@@ -699,5 +699,5 @@ async def get_user_management_statistics(
     return {
         "users": user_stats,
         "roles": role_stats,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }

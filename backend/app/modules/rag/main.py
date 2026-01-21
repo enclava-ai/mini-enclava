@@ -10,7 +10,7 @@ import mimetypes
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
 from pathlib import Path
 import hashlib
@@ -101,7 +101,7 @@ class ProcessedDocument:
 
     def __post_init__(self):
         if self.created_at is None:
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(timezone.utc)
 
 
 @dataclass
@@ -128,7 +128,7 @@ class Document:
 
     def __post_init__(self):
         if self.created_at is None:
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(timezone.utc)
 
 
 @dataclass
@@ -265,66 +265,187 @@ class RAGModule(BaseModule):
         return hashlib.sha256(content).hexdigest()
 
     def _detect_mime_type(self, filename: str, content: bytes) -> str:
-        """Detect MIME type of file"""
-        # Try to detect from filename
-        mime_type, _ = mimetypes.guess_type(filename)
-        if mime_type:
-            return mime_type
+        """
+        Detect MIME type of file using content-based detection.
 
-        # Check for JSONL file extension
+        SECURITY FIX #37: Use content-based MIME detection with mismatch validation.
+        Content signatures take precedence over filename extensions to prevent
+        malicious content with spoofed extensions.
+        """
+        # SECURITY: Detect MIME from content first (more reliable than extension)
+        content_mime = self._detect_mime_from_content(content, filename)
+
+        # Get MIME from filename for comparison
+        filename_mime, _ = mimetypes.guess_type(filename)
+
+        # Check for JSONL file extension (special case not in mimetypes)
         if filename.lower().endswith(".jsonl"):
-            return "application/x-ndjson"
+            filename_mime = "application/x-ndjson"
 
-        # Try to detect from content
-        if content.startswith(b"%PDF"):
-            return "application/pdf"
-        elif content.startswith(b"PK"):
-            # This could be DOCX, XLSX, or other Office formats
-            if filename.lower().endswith((".docx", ".docm")):
-                return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            elif filename.lower().endswith((".xlsx", ".xlsm")):
-                return (
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        # SECURITY: Validate that extension and content MIME types are compatible
+        if filename_mime and content_mime:
+            if not self._mime_types_compatible(filename_mime, content_mime):
+                # Log security warning for mismatch
+                self.logger.warning(
+                    f"SECURITY: MIME type mismatch detected. "
+                    f"Filename suggests '{filename_mime}' but content is '{content_mime}'. "
+                    f"Filename: {filename}"
                 )
-            else:
-                return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        elif content.startswith(b"\xd0\xcf\x11\xe0"):
-            # Old Office format (DOC, XLS)
-            if filename.lower().endswith(".xls"):
-                return "application/vnd.ms-excel"
-            else:
-                return "application/msword"
-        elif content.startswith(b"<html") or content.startswith(b"<!DOCTYPE"):
+                # Use content-based detection (safer) - don't trust the extension
+                return content_mime
+
+        return content_mime
+
+    def _detect_mime_from_content(self, content: bytes, filename: str) -> str:
+        """Detect MIME type from file content using magic bytes."""
+        # Magic byte signatures for various file types
+        # Format: (signature_bytes, offset, mime_type)
+        signatures = [
+            # Documents
+            (b"%PDF", 0, "application/pdf"),
+            (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", 0, None),  # OLE (needs extension check)
+            (b"PK\x03\x04", 0, None),  # ZIP-based formats (needs extension check)
+
+            # Images (reject as not supported for RAG)
+            (b"\xff\xd8\xff", 0, "image/jpeg"),
+            (b"\x89PNG\r\n\x1a\n", 0, "image/png"),
+            (b"GIF87a", 0, "image/gif"),
+            (b"GIF89a", 0, "image/gif"),
+
+            # Executables (security: these should be rejected)
+            (b"MZ", 0, "application/x-executable"),
+            (b"\x7fELF", 0, "application/x-executable"),
+
+            # Archives
+            (b"Rar!\x1a\x07", 0, "application/x-rar-compressed"),
+            (b"\x1f\x8b\x08", 0, "application/gzip"),
+        ]
+
+        for signature, offset, mime in signatures:
+            if len(content) > offset + len(signature):
+                if content[offset:offset + len(signature)] == signature:
+                    if mime:
+                        return mime
+                    # Need extension check for OLE and ZIP formats
+                    if signature == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+                        return self._detect_ole_type(filename)
+                    if signature == b"PK\x03\x04":
+                        return self._detect_zip_type(filename, content)
+
+        # Text-based detection
+        if content.startswith(b"<html") or content.startswith(b"<!DOCTYPE") or content.startswith(b"<!doctype"):
             return "text/html"
-        elif content.startswith(b"{") or content.startswith(b"["):
-            # Check if it's JSONL by looking for newline-delimited JSON
-            try:
-                content_str = content.decode("utf-8", errors="ignore")
-                lines = content_str.split("\n")
-                # Filter out empty lines
-                non_empty_lines = [line.strip() for line in lines[:10] if line.strip()]
 
-                # If we have multiple non-empty lines that all start with {, it's likely JSONL
-                if len(non_empty_lines) > 1 and all(
-                    line.startswith("{") and line.endswith("}") for line in non_empty_lines[:5]
-                ):
-                    # Additional validation: try parsing a few lines as JSON
-                    import json
-                    valid_json_lines = 0
-                    for line in non_empty_lines[:3]:
-                        try:
-                            json.loads(line)
-                            valid_json_lines += 1
-                        except:
-                            break
+        if content.startswith(b"<?xml"):
+            return "application/xml"
 
-                    if valid_json_lines > 1:
-                        return "application/x-ndjson"
-            except:
-                pass
-            return "application/json"
-        else:
+        if content.startswith(b"{") or content.startswith(b"["):
+            return self._detect_json_type(content)
+
+        # Default to text/plain for text-like content
+        try:
+            content[:1000].decode("utf-8")
             return "text/plain"
+        except UnicodeDecodeError:
+            return "application/octet-stream"
+
+    def _detect_ole_type(self, filename: str) -> str:
+        """Detect specific OLE document type from extension."""
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
+        ole_types = {
+            "doc": "application/msword",
+            "xls": "application/vnd.ms-excel",
+            "ppt": "application/vnd.ms-powerpoint",
+        }
+        return ole_types.get(ext, "application/msword")
+
+    def _detect_zip_type(self, filename: str, content: bytes) -> str:
+        """Detect specific ZIP-based document type."""
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
+        zip_types = {
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "docm": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "xlsm": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "odt": "application/vnd.oasis.opendocument.text",
+            "ods": "application/vnd.oasis.opendocument.spreadsheet",
+        }
+        if ext in zip_types:
+            return zip_types[ext]
+
+        # Try to detect from ZIP contents
+        try:
+            import zipfile
+            import io
+            with zipfile.ZipFile(io.BytesIO(content[:10000])) as zf:
+                names = zf.namelist()
+                if "[Content_Types].xml" in names:
+                    # Office Open XML format
+                    if any("word/" in n for n in names):
+                        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    if any("xl/" in n for n in names):
+                        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                if "mimetype" in names:
+                    # ODF format
+                    return "application/vnd.oasis.opendocument.text"
+        except:
+            pass
+
+        return "application/zip"
+
+    def _detect_json_type(self, content: bytes) -> str:
+        """Detect if content is JSON or JSONL."""
+        try:
+            content_str = content.decode("utf-8", errors="ignore")
+            lines = content_str.split("\n")
+            non_empty_lines = [line.strip() for line in lines[:10] if line.strip()]
+
+            if len(non_empty_lines) > 1 and all(
+                line.startswith("{") and line.endswith("}") for line in non_empty_lines[:5]
+            ):
+                import json
+                valid_json_lines = 0
+                for line in non_empty_lines[:3]:
+                    try:
+                        json.loads(line)
+                        valid_json_lines += 1
+                    except:
+                        break
+
+                if valid_json_lines > 1:
+                    return "application/x-ndjson"
+        except:
+            pass
+        return "application/json"
+
+    def _mime_types_compatible(self, ext_mime: str, content_mime: str) -> bool:
+        """Check if extension-based and content-based MIME types are compatible."""
+        if ext_mime == content_mime:
+            return True
+
+        # Define compatible MIME type groups
+        compatible_groups = [
+            # Text types
+            {"text/plain", "text/markdown", "text/csv", "text/html"},
+            # JSON types
+            {"application/json", "application/x-ndjson", "text/plain"},
+            # Office document types (old and new)
+            {
+                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            },
+            {
+                "application/vnd.ms-excel",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            },
+        ]
+
+        for group in compatible_groups:
+            if ext_mime in group and content_mime in group:
+                return True
+
+        return False
 
     def _detect_language(self, text: str) -> Tuple[str, float]:
         """Detect language of text (simplified implementation)"""
@@ -1408,7 +1529,7 @@ class RAGModule(BaseModule):
                 entities=entities,
                 keywords=keywords,
                 processing_time=processing_time,
-                processed_at=datetime.utcnow(),
+                processed_at=datetime.now(timezone.utc),
                 file_hash=file_hash,
                 file_size=len(file_data),
             )
@@ -1495,7 +1616,7 @@ class RAGModule(BaseModule):
                     "chunk_index": i,
                     "chunk_count": len(chunks),
                     "content": chunk,
-                    "indexed_at": datetime.utcnow().isoformat(),
+                    "indexed_at": datetime.now(timezone.utc).isoformat(),
                 }
 
                 points.append(
@@ -1597,7 +1718,7 @@ class RAGModule(BaseModule):
                     "chunk_index": i,
                     "chunk_count": len(chunks),
                     "content": chunk,
-                    "indexed_at": datetime.utcnow().isoformat(),
+                    "indexed_at": datetime.now(timezone.utc).isoformat(),
                 }
 
                 # Add source_url if present in ProcessedDocument

@@ -1,7 +1,7 @@
 """
 Notification models for multi-channel communication
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from enum import Enum
 from sqlalchemy import (
@@ -15,7 +15,7 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class NotificationType(str, Enum):
@@ -73,8 +73,8 @@ class NotificationTemplate(Base):
     is_active = Column(Boolean, default=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     notifications = relationship("Notification", back_populates="template")
@@ -130,8 +130,8 @@ class NotificationChannel(Base):
     last_error = Column(Text, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     notifications = relationship("Notification", back_populates="channel")
@@ -164,7 +164,7 @@ class NotificationChannel(Base):
 
     def update_stats(self, success: bool, error_message: Optional[str] = None):
         """Update channel statistics"""
-        self.last_used_at = datetime.utcnow()
+        self.last_used_at = utc_now()
         if success:
             self.success_count += 1
             self.last_error = None
@@ -222,8 +222,8 @@ class Notification(Base):
     tags = Column(JSON, default=list)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     template = relationship("NotificationTemplate", back_populates="notifications")
@@ -271,18 +271,18 @@ class Notification(Base):
     def mark_sent(self, external_id: Optional[str] = None):
         """Mark notification as sent"""
         self.status = NotificationStatus.SENT
-        self.sent_at = datetime.utcnow()
+        self.sent_at = utc_now()
         self.external_id = external_id
 
     def mark_delivered(self):
         """Mark notification as delivered"""
         self.status = NotificationStatus.DELIVERED
-        self.delivered_at = datetime.utcnow()
+        self.delivered_at = utc_now()
 
     def mark_failed(self, error_message: str):
         """Mark notification as failed"""
         self.status = NotificationStatus.FAILED
-        self.failed_at = datetime.utcnow()
+        self.failed_at = utc_now()
         self.error_message = error_message
         self.attempts += 1
 
@@ -291,5 +291,5 @@ class Notification(Base):
         return (
             self.status in [NotificationStatus.FAILED, NotificationStatus.RETRY]
             and self.attempts < self.max_attempts
-            and (self.expires_at is None or self.expires_at > datetime.utcnow())
+            and (self.expires_at is None or self.expires_at > utc_now())
         )

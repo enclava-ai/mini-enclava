@@ -5,7 +5,7 @@ Background task for archiving expired responses and cleaning up old archived res
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +31,7 @@ class ResponseArchivalTask:
         """
         try:
             # Find expired responses that aren't archived yet
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
 
             # Update expired responses to archived
             stmt = (
@@ -69,7 +69,7 @@ class ResponseArchivalTask:
         """
         try:
             # Calculate cutoff date (responses archived more than 90 days ago)
-            cutoff_date = datetime.utcnow() - Response.get_archived_retention()
+            cutoff_date = datetime.now(timezone.utc) - Response.get_archived_retention()
 
             # Delete old archived responses
             stmt = delete(Response).where(
@@ -105,7 +105,7 @@ class ResponseArchivalTask:
             Number of responses deleted
         """
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
 
             # Delete old non-stored responses
             stmt = delete(Response).where(

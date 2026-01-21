@@ -7,7 +7,7 @@ This is the single source of truth for all RAG collection statistics
 import httpx
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.config import settings
 
@@ -108,7 +108,7 @@ class QdrantStatsService:
                                 "status": status,
                                 "qdrant_collection_name": collection_name,
                                 "created_at": "",  # Not available from Qdrant
-                                "updated_at": datetime.utcnow().isoformat(),
+                                "updated_at": datetime.now(timezone.utc).isoformat(),
                                 "is_active": status == "green",
                                 "is_managed": True,
                                 "source": "qdrant",

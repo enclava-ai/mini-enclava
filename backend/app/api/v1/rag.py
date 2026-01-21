@@ -11,7 +11,7 @@ from sqlalchemy import select
 from pydantic import BaseModel
 import io
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db.database import get_db
 from app.core.security import get_current_user
@@ -193,7 +193,7 @@ async def get_rag_stats(
                         "total_documents", 0
                     )  # Same as documents for RAG
                 },
-                "last_updated": datetime.utcnow().isoformat(),
+                "last_updated": datetime.now(timezone.utc).isoformat(),
             },
         }
 
@@ -523,10 +523,15 @@ async def download_document(
 
         content, filename, mime_type = result
 
+        # SECURITY FIX #9: Sanitize filename for Content-Disposition header
+        # Prevents header injection via CR/LF and other malicious characters
+        from app.utils.security import encode_content_disposition
+        content_disposition = encode_content_disposition(filename)
+
         return StreamingResponse(
             io.BytesIO(content),
             media_type=mime_type,
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
+            headers={"Content-Disposition": content_disposition},
         )
     except HTTPException:
         raise
@@ -555,7 +560,7 @@ async def search_with_debug(
         raise HTTPException(status_code=503, detail="RAG module not initialized")
 
     debug_info = {}
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
 
     try:
         # Apply configuration if provided

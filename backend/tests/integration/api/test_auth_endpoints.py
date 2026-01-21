@@ -14,7 +14,7 @@ Tests comprehensive authentication API functionality:
 
 import pytest
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch, AsyncMock
 from httpx import AsyncClient
 from fastapi import status
@@ -62,7 +62,7 @@ class TestAuthenticationEndpoints:
             is_active=True,
             is_verified=True,
             role="user",
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
 
     # === USER REGISTRATION TESTS ===
@@ -88,7 +88,7 @@ class TestAuthenticationEndpoints:
                 is_active=True,
                 is_verified=False,
                 role="user",
-                created_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc)
             )
             mock_session.refresh.side_effect = lambda user: setattr(user, 'id', 1)
             
@@ -345,7 +345,7 @@ class TestAuthenticationEndpoints:
             "sub": "123",
             "username": "testuser",
             "token_type": "refresh",
-            "exp": datetime.utcnow() - timedelta(hours=1)  # Expired 1 hour ago
+            "exp": datetime.now(timezone.utc) - timedelta(hours=1)  # Expired 1 hour ago
         }
         
         with patch('app.api.v1.auth.verify_token') as mock_verify:

@@ -14,6 +14,7 @@ Tests comprehensive threat detection functionality:
 """
 
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch, AsyncMock
 from app.core.threat_detection import ThreatDetectionService
 from app.models.security_event import SecurityEvent
@@ -501,14 +502,14 @@ class TestThreatDetectionService:
                 client_ip=client_ip,
                 risk_score=0.9,
                 blocked=True,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             ),
             SecurityEvent(
                 event_type="xss_attempt", 
                 client_ip=client_ip,
                 risk_score=0.8,
                 blocked=True,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
         ]
         

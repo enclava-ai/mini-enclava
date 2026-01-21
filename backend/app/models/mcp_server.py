@@ -6,7 +6,7 @@ used by agents. This model stores the connection details and tool cache
 for configured MCP servers.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     Integer,
@@ -18,7 +18,7 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class MCPServer(Base):
@@ -72,8 +72,8 @@ class MCPServer(Base):
     last_used_at = Column(DateTime, nullable=True)  # Last time a tool was called
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     created_by = relationship(
@@ -150,11 +150,11 @@ class MCPServer(Base):
             success: Whether the connection was successful
             error: Error message if connection failed
         """
-        self.last_connected_at = datetime.utcnow()
+        self.last_connected_at = utc_now()
         self.last_connection_status = "success" if success else "failed"
         self.last_connection_error = error if not success else None
 
     def record_usage(self):
         """Record a tool call usage."""
         self.usage_count = (self.usage_count or 0) + 1
-        self.last_used_at = datetime.utcnow()
+        self.last_used_at = utc_now()

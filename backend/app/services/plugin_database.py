@@ -305,19 +305,49 @@ class PluginDatabaseManager:
                     str(backup_file),
                 ]
 
-                # Set password via environment
+                # SECURITY FIX #4: Use .pgpass file instead of PGPASSWORD in environment
+                # Environment variables are visible in process listings (ps auxww)
                 env = os.environ.copy()
-                if parsed.password:
-                    env["PGPASSWORD"] = parsed.password
+                pgpass_file = None
 
-                # Execute pg_dump
-                result = subprocess.run(
-                    pg_dump_cmd,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,  # 5 minute timeout
-                )
+                if parsed.password:
+                    import tempfile
+                    import stat
+
+                    # Create temporary .pgpass file with secure permissions
+                    pgpass_fd, pgpass_path = tempfile.mkstemp(prefix='.pgpass_', suffix='')
+                    pgpass_file = Path(pgpass_path)
+
+                    try:
+                        # Write .pgpass entry: hostname:port:database:username:password
+                        pgpass_entry = f"{parsed.hostname or 'localhost'}:{parsed.port or 5432}:{parsed.path.lstrip('/')}:{parsed.username}:{parsed.password}\n"
+                        os.write(pgpass_fd, pgpass_entry.encode())
+                        os.close(pgpass_fd)
+
+                        # Set file permissions to 0600 (required by PostgreSQL)
+                        os.chmod(pgpass_path, stat.S_IRUSR | stat.S_IWUSR)
+
+                        # Point to our .pgpass file
+                        env["PGPASSFILE"] = pgpass_path
+                    except Exception:
+                        os.close(pgpass_fd)
+                        if pgpass_file and pgpass_file.exists():
+                            pgpass_file.unlink()
+                        raise
+
+                try:
+                    # Execute pg_dump
+                    result = subprocess.run(
+                        pg_dump_cmd,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=300,  # 5 minute timeout
+                    )
+                finally:
+                    # Clean up .pgpass file
+                    if pgpass_file and pgpass_file.exists():
+                        pgpass_file.unlink()
 
                 if result.returncode != 0:
                     logger.error(f"pg_dump failed: {result.stderr}")
@@ -422,19 +452,48 @@ class PluginDatabaseManager:
                         str(temp_backup),
                     ]
 
-                    # Set password via environment
+                    # SECURITY FIX #4: Use .pgpass file instead of PGPASSWORD in environment
                     env = os.environ.copy()
-                    if parsed.password:
-                        env["PGPASSWORD"] = parsed.password
+                    pgpass_file = None
 
-                    # Execute psql restore
-                    result = subprocess.run(
-                        psql_cmd,
-                        env=env,
-                        capture_output=True,
-                        text=True,
-                        timeout=600,  # 10 minute timeout
-                    )
+                    if parsed.password:
+                        import tempfile
+                        import stat
+
+                        # Create temporary .pgpass file with secure permissions
+                        pgpass_fd, pgpass_path = tempfile.mkstemp(prefix='.pgpass_', suffix='')
+                        pgpass_file = Path(pgpass_path)
+
+                        try:
+                            # Write .pgpass entry: hostname:port:database:username:password
+                            pgpass_entry = f"{parsed.hostname or 'localhost'}:{parsed.port or 5432}:{parsed.path.lstrip('/')}:{parsed.username}:{parsed.password}\n"
+                            os.write(pgpass_fd, pgpass_entry.encode())
+                            os.close(pgpass_fd)
+
+                            # Set file permissions to 0600 (required by PostgreSQL)
+                            os.chmod(pgpass_path, stat.S_IRUSR | stat.S_IWUSR)
+
+                            # Point to our .pgpass file
+                            env["PGPASSFILE"] = pgpass_path
+                        except Exception:
+                            os.close(pgpass_fd)
+                            if pgpass_file and pgpass_file.exists():
+                                pgpass_file.unlink()
+                            raise
+
+                    try:
+                        # Execute psql restore
+                        result = subprocess.run(
+                            psql_cmd,
+                            env=env,
+                            capture_output=True,
+                            text=True,
+                            timeout=600,  # 10 minute timeout
+                        )
+                    finally:
+                        # Clean up .pgpass file
+                        if pgpass_file and pgpass_file.exists():
+                            pgpass_file.unlink()
 
                     if result.returncode != 0:
                         logger.error(f"psql restore failed: {result.stderr}")

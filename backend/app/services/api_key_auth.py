@@ -5,7 +5,7 @@ Handles API key validation and user authentication with Redis caching for perfor
 
 import logging
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +41,8 @@ class APIKeyAuthService:
                 return None
 
             key_prefix = api_key[:8]
+            # SECURITY FIX #42: Redact API key prefix in logs - show only last 4 chars
+            redacted_prefix = f"****{key_prefix[-4:]}"
 
             # Try cached verification first
             cached_verification = await cached_api_key_service.verify_api_key_cached(
@@ -53,7 +55,7 @@ class APIKeyAuthService:
             )
 
             if not context:
-                logger.warning(f"API key not found: {key_prefix}")
+                logger.warning(f"API key not found: {redacted_prefix}")
                 return None
 
             api_key_obj = context["api_key"]
@@ -75,7 +77,7 @@ class APIKeyAuthService:
 
                 # Verify the API key hash
                 if not verify_api_key(api_key, key_hash):
-                    logger.warning(f"Invalid API key hash: {key_prefix}")
+                    logger.warning(f"Invalid API key hash: {redacted_prefix}")
                     return None
 
                 # Cache successful verification
@@ -85,7 +87,7 @@ class APIKeyAuthService:
 
             # Check if key is valid (expiry, active status)
             if not api_key_obj.is_valid():
-                logger.warning(f"API key expired or inactive: {key_prefix}")
+                logger.warning(f"API key expired or inactive: {redacted_prefix}")
                 # Invalidate cache for expired keys
                 await cached_api_key_service.invalidate_api_key_cache(key_prefix)
                 return None
@@ -93,7 +95,7 @@ class APIKeyAuthService:
             # Check IP restrictions
             client_ip = request.client.host if request.client else "unknown"
             if not api_key_obj.can_access_from_ip(client_ip):
-                logger.warning(f"IP not allowed for API key {key_prefix}: {client_ip}")
+                logger.warning(f"IP not allowed for API key {redacted_prefix}: {client_ip}")
                 return None
 
             # Update last used timestamp asynchronously (performance optimization)
@@ -171,9 +173,18 @@ async def get_api_key_context(
     if not api_key:
         api_key = request.headers.get("X-API-Key")
 
-    # 3. Check query parameter
-    if not api_key:
-        api_key = request.query_params.get("api_key")
+    # SECURITY FIX #36: API key in query parameters is deprecated and rejected
+    # Query params can be logged in access logs, browser history, and referrer headers
+    query_api_key = request.query_params.get("api_key")
+    if query_api_key:
+        logger.warning(
+            "DEPRECATED_API_KEY_IN_QUERY_PARAM",
+            extra={"path": request.url.path, "client_ip": request.client.host if request.client else "unknown"},
+        )
+        # Reject API key in query params for security
+        # If you need a migration period, you can temporarily allow it with a warning
+        # For now, we reject it outright
+        return None
 
     if not api_key:
         return None

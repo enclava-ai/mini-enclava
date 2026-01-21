@@ -7,7 +7,7 @@ import json
 import logging
 import asyncio
 from typing import Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
@@ -173,7 +173,7 @@ class JSONLProcessor:
                                 "line_number": line_idx,
                                 "content_type": "qa_pair",
                                 "question": question[:100],  # Truncate for metadata
-                                "processed_at": datetime.utcnow().isoformat(),
+                                "processed_at": datetime.now(timezone.utc).isoformat(),
                             }
 
                             # Add source_url if valid

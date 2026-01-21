@@ -2,11 +2,12 @@
 Usage Tracking model for API key usage statistics
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import (
     Column,
     Integer,
+    BigInteger,
     String,
     DateTime,
     Boolean,
@@ -16,7 +17,7 @@ from sqlalchemy import (
     Float,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class UsageTracking(Base):
@@ -43,13 +44,14 @@ class UsageTracking(Base):
     method = Column(String, nullable=False)  # HTTP method
     model = Column(String, nullable=True)  # Model used (if applicable)
 
+    # SECURITY FIX #35: Use BigInteger for counters to prevent overflow
     # Usage metrics
-    request_tokens = Column(Integer, default=0)  # Input tokens
-    response_tokens = Column(Integer, default=0)  # Output tokens
-    total_tokens = Column(Integer, default=0)  # Total tokens used
+    request_tokens = Column(BigInteger, default=0)  # Input tokens
+    response_tokens = Column(BigInteger, default=0)  # Output tokens
+    total_tokens = Column(BigInteger, default=0)  # Total tokens used
 
     # Cost tracking
-    cost_cents = Column(Integer, default=0)  # Cost in cents
+    cost_cents = Column(BigInteger, default=0)  # Cost in cents
     cost_currency = Column(String, default="USD")  # Currency
 
     # Response information
@@ -66,7 +68,7 @@ class UsageTracking(Base):
     request_metadata = Column(JSON, default=dict)  # Additional request metadata
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     def __repr__(self):
         return f"<UsageTracking(id={self.id}, api_key_id={self.api_key_id}, endpoint='{self.endpoint}')>"

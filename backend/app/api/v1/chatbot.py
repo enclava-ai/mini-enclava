@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db.database import get_db
 from app.models.chatbot import (
@@ -282,7 +282,7 @@ async def update_chatbot(
             .values(
                 name=existing_config.get("name", chatbot.name),
                 config=existing_config,
-                updated_at=datetime.utcnow(),
+                updated_at=datetime.now(timezone.utc),
             )
         )
 
@@ -947,7 +947,7 @@ async def update_tool_config(
         await db.execute(
             update(ChatbotInstance)
             .where(ChatbotInstance.id == chatbot_id)
-            .values(config=config, updated_at=datetime.utcnow())
+            .values(config=config, updated_at=datetime.now(timezone.utc))
         )
 
         await db.commit()
@@ -1022,7 +1022,7 @@ async def external_chat_with_chatbot(
             chatbot_id=chatbot_id,
             user_id=f"api_key_{api_key.id}",
             conversation_id=request.conversation_id,
-            title=f"API Chat {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+            title=f"API Chat {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
         )
 
         # Add API key metadata to conversation context if new
@@ -1346,7 +1346,7 @@ async def external_chatbot_chat_completions(
             chatbot_id=chatbot_id,
             user_id=f"api_key_{api_key.id}",
             conversation_id=conv_hash,
-            title=f"API Chat {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+            title=f"API Chat {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
         )
 
         # Add API key metadata to conversation context if new

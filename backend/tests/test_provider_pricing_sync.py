@@ -5,7 +5,7 @@ Tests ProviderPricingSyncService functionality including API fetching,
 pricing conversion, database operations, and error handling.
 """
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 import uuid
@@ -351,7 +351,7 @@ class TestSyncProviderOperations:
             output_price_per_million_cents=100,
             price_source="api_sync",
             is_override=False,
-            effective_from=datetime.utcnow(),
+            effective_from=datetime.now(timezone.utc),
             effective_until=None,
         )
 
@@ -394,7 +394,7 @@ class TestSyncProviderOperations:
             price_source="manual",
             is_override=True,  # This is an override
             override_reason="Custom pricing",
-            effective_from=datetime.utcnow(),
+            effective_from=datetime.now(timezone.utc),
             effective_until=None,
         )
 
@@ -431,7 +431,7 @@ class TestSyncProviderOperations:
             output_price_per_million_cents=100,
             price_source="api_sync",
             is_override=False,
-            effective_from=datetime.utcnow(),
+            effective_from=datetime.now(timezone.utc),
             effective_until=None,
         )
 
@@ -516,7 +516,7 @@ class TestSyncProviderOperations:
             output_price_per_million_cents=100,
             price_source="api_sync",
             is_override=False,
-            effective_from=datetime.utcnow(),
+            effective_from=datetime.now(timezone.utc),
             effective_until=None,
         )
 

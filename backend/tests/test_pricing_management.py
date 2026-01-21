@@ -6,7 +6,7 @@ override management, querying, and search operations.
 Also tests Pydantic schema validation.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 from pydantic import ValidationError
 
@@ -191,7 +191,7 @@ class TestPricingResponseSchema:
 
     def test_pricing_response_serialization(self):
         """Test PricingResponse can be created from dict."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         response = PricingResponse(
             id=1,
             provider_id="redpill",
@@ -222,7 +222,7 @@ class TestPricingResponseSchema:
 
     def test_pricing_response_handles_optional_fields(self):
         """Test PricingResponse handles optional fields correctly."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         response = PricingResponse(
             id=1,
             provider_id="test",
@@ -351,7 +351,7 @@ class TestPricingManagementService:
             output_price_per_million_cents=200,
             price_source="api_sync",
             is_override=False,
-            effective_from=datetime.utcnow() - timedelta(days=10),
+            effective_from=datetime.now(timezone.utc) - timedelta(days=10),
             effective_until=None,
         )
 
@@ -411,7 +411,7 @@ class TestPricingManagementService:
             output_price_per_million_cents=200,
             price_source="api_sync",
             is_override=False,
-            effective_from=datetime.utcnow() - timedelta(days=10),
+            effective_from=datetime.now(timezone.utc) - timedelta(days=10),
             effective_until=None,
         )
 
@@ -452,7 +452,7 @@ class TestPricingManagementService:
             price_source="manual",
             is_override=True,
             override_reason="Manual pricing",
-            effective_from=datetime.utcnow() - timedelta(days=10),
+            effective_from=datetime.now(timezone.utc) - timedelta(days=10),
             effective_until=None,
         )
 
@@ -480,7 +480,7 @@ class TestPricingManagementService:
             output_price_per_million_cents=200,
             price_source="api_sync",
             is_override=False,  # Not an override
-            effective_from=datetime.utcnow(),
+            effective_from=datetime.now(timezone.utc),
             effective_until=None,
         )
 
@@ -568,7 +568,7 @@ class TestPricingManagementService:
 
     async def test_get_pricing_history(self, service, mock_db):
         """Test get_pricing_history returns all versions."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         history = [
             ProviderPricing(
                 id=3,
@@ -724,7 +724,7 @@ class TestPricingManagementService:
             elif call_num == 5:  # Manual count
                 result.scalar.return_value = 3
             elif call_num == 6:  # Last sync
-                result.scalar.return_value = datetime.utcnow()
+                result.scalar.return_value = datetime.now(timezone.utc)
 
             mock_execute.call_count = call_num + 1
             return result
@@ -764,7 +764,7 @@ class TestPricingManagementService:
                 new_input_price_per_million_cents=100,
                 new_output_price_per_million_cents=200,
                 change_source="api_sync",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             ),
         ]
 
@@ -789,7 +789,7 @@ class TestPricingManagementService:
                 new_output_price_per_million_cents=40,
                 change_source="admin_manual",
                 changed_by_user_id=123,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             ),
         ]
 
@@ -826,7 +826,7 @@ class TestPricingAuditLogResponseSchema:
             changed_by_user_id=None,
             change_reason=None,
             sync_job_id="123e4567-e89b-12d3-a456-426614174000",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         assert response.action == "update"
@@ -884,7 +884,7 @@ class TestPricingSummarySchema:
             override_count=5,
             api_sync_count=45,
             manual_count=5,
-            last_sync_at=datetime.utcnow(),
+            last_sync_at=datetime.now(timezone.utc),
         )
 
         assert summary.total_models == 50

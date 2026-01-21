@@ -7,24 +7,53 @@ Provides comprehensive health monitoring including:
 - Session leak detection
 - Database connectivity
 - Service dependencies
+
+Security mitigation #18: Detailed health endpoints require admin authentication
+to prevent information disclosure about system internals.
 """
 
 import asyncio
 import logging
 import psutil
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.database import async_session_factory, get_pool_status
 from app.services.embedding_service import embedding_service
 from app.core.config import settings
+from app.core.security import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _require_admin_for_health(current_user: dict) -> dict:
+    """
+    Require admin privileges for detailed health endpoints.
+
+    Security mitigation #18: Detailed health endpoints leak system information
+    that could be useful for attackers. Require admin access.
+    """
+    if current_user.get("is_superuser"):
+        return current_user
+
+    role = current_user.get("role")
+    if role and hasattr(role, "name"):
+        role_name = role.name
+    else:
+        role_name = role
+
+    if role_name in ("super_admin", "admin"):
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Detailed health endpoints require administrator privileges",
+    )
 
 
 class HealthChecker:
@@ -53,7 +82,7 @@ class HealthChecker:
                 return {
                     "status": "healthy",
                     "response_time_ms": round(duration * 1000, 2),
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "details": {
                         "connection": "successful",
                         "query_execution": "successful",
@@ -65,7 +94,7 @@ class HealthChecker:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "details": {"connection": "failed", "error_type": type(e).__name__},
             }
 
@@ -127,7 +156,7 @@ class HealthChecker:
 
             return {
                 "status": pool_health,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "pool_status": pool_status,
                 "issues": issues,
             }
@@ -137,7 +166,7 @@ class HealthChecker:
             return {
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def check_memory_health(self) -> Dict[str, Any]:
@@ -173,7 +202,7 @@ class HealthChecker:
 
             return {
                 "status": memory_status,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "process_memory_mb": round(process_memory_mb, 2),
                 "system_memory_percent": memory.percent,
                 "system_available_gb": round(memory.available / (1024**3), 2),
@@ -185,7 +214,7 @@ class HealthChecker:
             return {
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def check_connection_health(self) -> Dict[str, Any]:
@@ -228,7 +257,7 @@ class HealthChecker:
 
             return {
                 "status": connection_status,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "total_connections": total_connections,
                 "established_connections": established_connections,
                 "http_connections": http_connections,
@@ -240,7 +269,7 @@ class HealthChecker:
             return {
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def check_embedding_service_health(self) -> Dict[str, Any]:
@@ -269,7 +298,7 @@ class HealthChecker:
             return {
                 "status": service_status,
                 "response_time_ms": round(duration * 1000, 2),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "stats": stats,
                 "issues": issues,
             }
@@ -279,7 +308,7 @@ class HealthChecker:
             return {
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def check_redis_health(self) -> Dict[str, Any]:
@@ -287,7 +316,7 @@ class HealthChecker:
         if not settings.REDIS_URL:
             return {
                 "status": "not_configured",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         try:
@@ -311,7 +340,7 @@ class HealthChecker:
             return {
                 "status": "healthy",
                 "response_time_ms": round(duration * 1000, 2),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -319,7 +348,7 @@ class HealthChecker:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def get_comprehensive_health(self) -> Dict[str, Any]:
@@ -348,7 +377,7 @@ class HealthChecker:
 
         return {
             "status": overall_status,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "checks": checks,
             "summary": {
                 "total_checks": len(checks),
@@ -377,13 +406,21 @@ async def basic_health_check():
         "status": "healthy",
         "app": settings.APP_NAME,
         "version": "1.0.0",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 @router.get("/health/detailed")
-async def detailed_health_check():
-    """Comprehensive health check with all services"""
+async def detailed_health_check(
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Comprehensive health check with all services.
+
+    Security mitigation #18: Requires admin authentication.
+    """
+    _require_admin_for_health(current_user)
+
     try:
         return await health_checker.get_comprehensive_health()
     except Exception as e:
@@ -395,8 +432,11 @@ async def detailed_health_check():
 
 
 @router.get("/health/memory")
-async def memory_health_check():
-    """Memory-specific health check"""
+async def memory_health_check(
+    current_user: dict = Depends(get_current_user),
+):
+    """Memory-specific health check. Security mitigation #18: Requires admin."""
+    _require_admin_for_health(current_user)
     try:
         return await health_checker.check_memory_health()
     except Exception as e:
@@ -408,8 +448,11 @@ async def memory_health_check():
 
 
 @router.get("/health/connections")
-async def connection_health_check():
-    """Connection-specific health check"""
+async def connection_health_check(
+    current_user: dict = Depends(get_current_user),
+):
+    """Connection-specific health check. Security mitigation #18: Requires admin."""
+    _require_admin_for_health(current_user)
     try:
         return await health_checker.check_connection_health()
     except Exception as e:
@@ -421,8 +464,11 @@ async def connection_health_check():
 
 
 @router.get("/health/embedding")
-async def embedding_service_health_check():
-    """Embedding service-specific health check"""
+async def embedding_service_health_check(
+    current_user: dict = Depends(get_current_user),
+):
+    """Embedding service-specific health check. Security mitigation #18: Requires admin."""
+    _require_admin_for_health(current_user)
     try:
         return await health_checker.check_embedding_service_health()
     except Exception as e:
@@ -434,8 +480,11 @@ async def embedding_service_health_check():
 
 
 @router.get("/health/pool")
-async def database_pool_health_check():
-    """Database connection pool health check"""
+async def database_pool_health_check(
+    current_user: dict = Depends(get_current_user),
+):
+    """Database connection pool health check. Security mitigation #18: Requires admin."""
+    _require_admin_for_health(current_user)
     try:
         return health_checker.check_pool_health()
     except Exception as e:

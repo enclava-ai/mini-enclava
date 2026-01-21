@@ -5,7 +5,7 @@ Audit logging service with async/non-blocking capabilities
 import asyncio
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.audit_log import AuditLog
 from app.core.logging import get_logger
@@ -109,7 +109,7 @@ async def log_audit_event_async(
             "user_agent": user_agent,
             "success": success,
             "severity": severity,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
         }
 
         # Queue the audit event (non-blocking)
@@ -173,7 +173,7 @@ async def log_audit_event(
             user_agent=user_agent,
             success=success,
             severity=severity,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         db.add(audit_log)

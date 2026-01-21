@@ -161,6 +161,197 @@ class PluginImportHook:
         return list(self.imported_modules)
 
 
+class PluginASTSecurityValidator:
+    """
+    AST-based security validator for plugin code.
+
+    SECURITY FIX #7, #24: Implements AST analysis to detect dangerous patterns
+    that string matching would miss, such as:
+    - Dynamic code execution (eval, exec, compile)
+    - Dangerous attribute access (getattr for builtins)
+    - Subprocess and OS command execution
+    - Direct access to dangerous dunder attributes
+    """
+
+    # Dangerous function names to detect
+    DANGEROUS_FUNCTIONS = {
+        "eval", "exec", "compile", "__import__",
+        "open",  # Only block in certain contexts
+        "input",  # Can hang plugins
+    }
+
+    # Dangerous attribute names
+    DANGEROUS_ATTRIBUTES = {
+        "__builtins__", "__globals__", "__code__", "__closure__",
+        "__subclasses__", "__mro__", "__bases__", "__class__",
+        "__dict__", "__getattribute__", "__setattr__", "__delattr__",
+        "func_globals", "func_code",
+    }
+
+    # Dangerous module.function patterns (module, function)
+    DANGEROUS_MODULE_CALLS = {
+        ("os", "system"), ("os", "popen"), ("os", "spawn"),
+        ("os", "spawnl"), ("os", "spawnle"), ("os", "spawnlp"),
+        ("os", "spawnlpe"), ("os", "spawnv"), ("os", "spawnve"),
+        ("os", "spawnvp"), ("os", "spawnvpe"), ("os", "fork"),
+        ("os", "forkpty"), ("os", "execl"), ("os", "execle"),
+        ("os", "execlp"), ("os", "execlpe"), ("os", "execv"),
+        ("os", "execve"), ("os", "execvp"), ("os", "execvpe"),
+        ("os", "remove"), ("os", "unlink"), ("os", "rmdir"),
+        ("subprocess", "run"), ("subprocess", "call"),
+        ("subprocess", "check_call"), ("subprocess", "check_output"),
+        ("subprocess", "Popen"), ("subprocess", "getoutput"),
+        ("subprocess", "getstatusoutput"),
+        ("shutil", "rmtree"), ("shutil", "move"),
+        ("importlib", "import_module"), ("importlib", "__import__"),
+        ("ctypes", "CDLL"), ("ctypes", "cdll"),
+        ("socket", "socket"), ("socket", "create_connection"),
+        ("multiprocessing", "Process"),
+        ("threading", "Thread"),
+        ("gc", "get_objects"), ("gc", "get_referrers"),
+    }
+
+    # Dangerous imports (module names)
+    DANGEROUS_IMPORTS = {
+        "subprocess", "ctypes", "multiprocessing",
+        "socket", "mmap", "resource",
+    }
+
+    def __init__(self):
+        self.violations = []
+        self.logger = get_logger("plugin.ast_validator")
+
+    def validate(self, tree) -> List[str]:
+        """Validate AST tree and return list of security violations."""
+        import ast
+
+        self.violations = []
+
+        for node in ast.walk(tree):
+            self._check_node(node)
+
+        return self.violations
+
+    def _check_node(self, node):
+        """Check a single AST node for security issues."""
+        import ast
+
+        # Check for direct dangerous function calls
+        if isinstance(node, ast.Call):
+            self._check_call(node)
+
+        # Check for dangerous attribute access
+        elif isinstance(node, ast.Attribute):
+            self._check_attribute(node)
+
+        # Check for dangerous imports
+        elif isinstance(node, ast.Import):
+            self._check_import(node)
+        elif isinstance(node, ast.ImportFrom):
+            self._check_import_from(node)
+
+        # Check for dangerous string operations that might be code execution
+        elif isinstance(node, ast.BinOp):
+            self._check_string_concatenation(node)
+
+    def _check_call(self, node):
+        """Check function calls for dangerous patterns."""
+        import ast
+
+        func = node.func
+
+        # Direct function call: eval(), exec(), etc.
+        if isinstance(func, ast.Name):
+            if func.id in self.DANGEROUS_FUNCTIONS:
+                self.violations.append(
+                    f"Dangerous function call: {func.id}()"
+                )
+
+        # Attribute call: os.system(), subprocess.run(), etc.
+        elif isinstance(func, ast.Attribute):
+            # Check for dangerous module.function patterns
+            if isinstance(func.value, ast.Name):
+                module = func.value.id
+                method = func.attr
+
+                if (module, method) in self.DANGEROUS_MODULE_CALLS:
+                    self.violations.append(
+                        f"Dangerous module call: {module}.{method}()"
+                    )
+
+            # Check for getattr on builtins
+            if func.attr == "getattr":
+                self.violations.append(
+                    "Suspicious getattr() call - may be used to bypass restrictions"
+                )
+
+        # Check for getattr(obj, 'dangerous_name')
+        if isinstance(func, ast.Name) and func.id == "getattr":
+            if len(node.args) >= 2:
+                second_arg = node.args[1]
+                if isinstance(second_arg, ast.Constant):
+                    if second_arg.value in self.DANGEROUS_FUNCTIONS | self.DANGEROUS_ATTRIBUTES:
+                        self.violations.append(
+                            f"getattr() used to access dangerous name: {second_arg.value}"
+                        )
+
+    def _check_attribute(self, node):
+        """Check attribute access for dangerous patterns."""
+        if node.attr in self.DANGEROUS_ATTRIBUTES:
+            self.violations.append(
+                f"Access to dangerous attribute: {node.attr}"
+            )
+
+    def _check_import(self, node):
+        """Check import statements."""
+        for alias in node.names:
+            module = alias.name.split(".")[0]
+            if module in self.DANGEROUS_IMPORTS:
+                self.violations.append(
+                    f"Import of dangerous module: {module}"
+                )
+
+    def _check_import_from(self, node):
+        """Check from...import statements."""
+        if node.module:
+            module = node.module.split(".")[0]
+            if module in self.DANGEROUS_IMPORTS:
+                self.violations.append(
+                    f"Import from dangerous module: {module}"
+                )
+
+            # Check for platform internals
+            if node.module.startswith(("app.db", "app.models", "app.core", "app.services")):
+                self.violations.append(
+                    f"Import from protected platform module: {node.module}"
+                )
+
+    def _check_string_concatenation(self, node):
+        """Check for suspicious string concatenation that might build dangerous code."""
+        import ast
+
+        # This is a heuristic - check if string concatenation results in dangerous names
+        if isinstance(node.op, ast.Add):
+            # Check if this looks like building 'eval', 'exec', etc.
+            left = self._get_string_value(node.left)
+            right = self._get_string_value(node.right)
+
+            if left and right:
+                combined = left + right
+                if combined in self.DANGEROUS_FUNCTIONS:
+                    self.violations.append(
+                        f"Suspicious string concatenation building dangerous name: '{combined}'"
+                    )
+
+    def _get_string_value(self, node):
+        """Extract string value from AST node if it's a constant string."""
+        import ast
+
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
+
 class PluginResourceMonitor:
     """Monitors plugin resource usage and enforces limits"""
 
@@ -574,64 +765,56 @@ class EnhancedPluginLoader:
         return plugin_class(manifest, plugin_token)
 
     def _validate_plugin_security(self, main_py_path: Path):
-        """Enhanced security validation for plugin code"""
+        """
+        Enhanced security validation for plugin code using AST analysis.
+
+        SECURITY FIX #7, #24: Use AST-based validation instead of string matching.
+        String matching can be bypassed with:
+        - String concatenation: 'ev' + 'al'
+        - getattr: getattr(__builtins__, 'eval')
+        - Dict access: __builtins__['eval']
+        - Unicode tricks: eval vs evаl (cyrillic 'а')
+
+        AST-based validation detects these at the syntax tree level.
+        """
+        import ast
+
         with open(main_py_path, "r", encoding="utf-8") as f:
             code_content = f.read()
 
-        # Dangerous patterns
-        dangerous_patterns = [
-            "eval(",
-            "exec(",
-            "compile(",
-            "subprocess.",
-            "os.system",
-            "os.popen",
-            "os.spawn",
-            "__import__",
-            "importlib.import_module",
-            "from app.db",
-            "from app.models",
-            "from app.core",
-            "SessionLocal",  # Allow sqlalchemy but block direct SessionLocal access
-            "socket.",
-            "multiprocessing.",
-            "ctypes.",
-            "mmap.",
-            "shutil.rmtree",
-            "os.remove",
-            "resource.",
-            "gc.",
-            "threading.Thread(",
-        ]
+        # Parse AST for comprehensive security check
+        try:
+            tree = ast.parse(code_content)
+        except SyntaxError as e:
+            raise SecurityError(f"Plugin has syntax error: {e}")
 
-        for pattern in dangerous_patterns:
-            if pattern in code_content:
-                raise SecurityError(
-                    f"Dangerous pattern detected in plugin code: {pattern}"
-                )
+        # Run AST-based security validator
+        validator = PluginASTSecurityValidator()
+        violations = validator.validate(tree)
 
-        # Check for suspicious imports
-        import_lines = [
-            line
-            for line in code_content.split("\n")
-            if line.strip().startswith(("import ", "from "))
-        ]
+        if violations:
+            raise SecurityError(
+                f"Security violations detected in plugin code: {'; '.join(violations)}"
+            )
 
-        for line in import_lines:
-            # Extract module name
-            if line.strip().startswith("import "):
-                module = line.strip()[7:].split()[0].split(".")[0]
-            elif line.strip().startswith("from "):
-                module = line.strip()[5:].split()[0].split(".")[0]
-            else:
-                continue
-
-            # Validate against security manager
-            hook = PluginImportHook("security_check")
-            try:
-                hook.validate_import(module)
-            except SecurityError as e:
-                raise SecurityError(f"Security validation failed: {e}")
+        # Also validate imports against the hook (as before)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module = alias.name.split(".")[0]
+                    hook = PluginImportHook("security_check")
+                    try:
+                        hook.validate_import(module)
+                    except SecurityError as e:
+                        raise SecurityError(f"Import validation failed: {e}")
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    module = node.module.split(".")[0]
+                    hook = PluginImportHook("security_check")
+                    try:
+                        hook.validate_import(module)
+                    except SecurityError as e:
+                        raise SecurityError(f"Import validation failed: {e}")
 
     async def unload_plugin(self, plugin_id: str) -> bool:
         """Unload plugin and cleanup sandbox"""

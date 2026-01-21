@@ -424,9 +424,9 @@ async def get_system_info(
     modules_loaded = 8  # Would get from actual module manager
 
     # Get active users count (last 24 hours)
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    yesterday = datetime.utcnow() - timedelta(days=1)
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
     active_users_query = select(User.id).where(User.last_login >= yesterday)
     active_users_result = await db.execute(active_users_query)
     active_users = len(active_users_result.fetchall())
@@ -938,7 +938,7 @@ async def export_settings(
 
     return {
         "settings": export_data,
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "exported_by": current_user["username"],
     }
 

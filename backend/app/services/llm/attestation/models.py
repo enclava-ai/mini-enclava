@@ -4,7 +4,7 @@ Attestation Result and Provider Health Models
 Data models for tracking attestation verification results and provider health state.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 

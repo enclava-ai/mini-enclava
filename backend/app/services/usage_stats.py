@@ -4,7 +4,7 @@ Usage Statistics Service
 Service for aggregating and querying usage statistics from usage_records.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Tuple
 
 from sqlalchemy import select, func, and_, desc, case
@@ -53,7 +53,7 @@ class UsageStatsService:
         """
         # Determine date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
         if start_date is None:
             start_date = end_date - timedelta(days=period_days)
 
@@ -233,7 +233,7 @@ class UsageStatsService:
         """
         # Determine date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
         if start_date is None:
             start_date = end_date - timedelta(days=period_days)
 
@@ -342,7 +342,7 @@ class UsageStatsService:
         """
         # Determine date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
         if start_date is None:
             start_date = end_date - timedelta(days=period_days)
 
@@ -394,7 +394,7 @@ class UsageStatsService:
         """
         # Determine date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
         if start_date is None:
             start_date = end_date - timedelta(days=period_days)
 
@@ -471,7 +471,7 @@ class UsageStatsService:
         """
         # Determine date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
         if start_date is None:
             start_date = end_date - timedelta(days=period_days)
 
@@ -541,7 +541,7 @@ class UsageStatsService:
         """
         # Determine date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
         if start_date is None:
             start_date = end_date - timedelta(days=period_days)
 
@@ -800,7 +800,7 @@ class UsageStatsService:
 
         # Determine date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
         if start_date is None:
             start_date = end_date - timedelta(days=period_days)
 
@@ -864,7 +864,7 @@ class UsageStatsService:
 
         # Determine date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
         if start_date is None:
             start_date = end_date - timedelta(days=period_days)
 

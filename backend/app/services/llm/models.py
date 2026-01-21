@@ -6,7 +6,7 @@ Pydantic models for LLM requests and responses.
 
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field, validator
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ToolCall(BaseModel):

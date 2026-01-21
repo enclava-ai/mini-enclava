@@ -7,28 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  Settings,
   Save,
   RefreshCw,
-  Globe,
   Database,
   Mail,
-  Bell,
-  Key,
-  Lock,
-  Server,
   AlertTriangle,
   CheckCircle,
   Info,
   Square,
   Clock,
-  Play,
-  Puzzle
 } from "lucide-react";
 import { PluginManager } from '@/components/plugins/PluginManager';
 import { useToast } from "@/hooks/use-toast";
@@ -37,25 +27,6 @@ import { useModules, triggerModuleRefresh } from '@/contexts/ModulesContext';
 import { Badge } from '@/components/ui/badge';
 
 interface SystemSettings {
-
-  // API Settings
-  api: {
-    // Rate Limiting by Authentication Level
-    rate_limit_authenticated_per_minute: number;
-    rate_limit_authenticated_per_hour: number;
-    rate_limit_api_key_per_minute: number;
-    rate_limit_api_key_per_hour: number;
-    rate_limit_premium_per_minute: number;
-    rate_limit_premium_per_hour: number;
-
-    // Request Settings
-    max_request_size_mb: number;
-    max_request_size_premium_mb: number;
-    enable_cors: boolean;
-    cors_origins: string[];
-    api_key_expiry_days: number;
-  };
-
   // Notification Settings
   notifications: {
     email_enabled: boolean;
@@ -152,9 +123,9 @@ function SettingsPageContent() {
 
       // Transform each category from backend format {key: {value, type, description}}
       // to frontend format {key: value}
-      // Skip security category as it has been removed from the UI
+      // Skip security and api categories as they have been removed from the UI
       for (const [categoryName, categorySettings] of Object.entries(data)) {
-        if (categoryName === 'security') continue; // Skip security settings
+        if (categoryName === 'security' || categoryName === 'api') continue; // Skip security and api settings
 
         if (typeof categorySettings === 'object' && categorySettings !== null) {
           transformedSettings[categoryName as keyof SystemSettings] = {} as any;
@@ -356,191 +327,12 @@ function SettingsPageContent() {
         </Alert>
       )}
 
-      <Tabs defaultValue="api" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="api">API</TabsTrigger>
+      <Tabs defaultValue="notifications" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="modules">Modules</TabsTrigger>
           <TabsTrigger value="plugins">Plugins</TabsTrigger>
         </TabsList>
-
-<TabsContent value="api" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Globe className="mr-2 h-5 w-5" />
-                API Settings
-              </CardTitle>
-              <CardDescription>
-                Configure API rate limits and request handling
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Rate Limiting by Authentication Level */}
-              <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Rate Limiting by Authentication Level</h3>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div className="space-y-3">
-                        <h4 className="font-medium text-sm text-muted-foreground">Authenticated Users</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label htmlFor="auth-minute">Per Minute</Label>
-                            <Input
-                              id="auth-minute"
-                              type="number"
-                              min="1"
-                              value={settings.api.rate_limit_authenticated_per_minute}
-                              onChange={(e) => updateSetting("api", "rate_limit_authenticated_per_minute", parseInt(e.target.value))}
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="auth-hour">Per Hour</Label>
-                            <Input
-                              id="auth-hour"
-                              type="number"
-                              min="1"
-                              value={settings.api.rate_limit_authenticated_per_hour}
-                              onChange={(e) => updateSetting("api", "rate_limit_authenticated_per_hour", parseInt(e.target.value))}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="space-y-3">
-                        <h4 className="font-medium text-sm text-muted-foreground">API Key Users</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label htmlFor="api-minute">Per Minute</Label>
-                            <Input
-                              id="api-minute"
-                              type="number"
-                              min="1"
-                              value={settings.api.rate_limit_api_key_per_minute}
-                              onChange={(e) => updateSetting("api", "rate_limit_api_key_per_minute", parseInt(e.target.value))}
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="api-hour">Per Hour</Label>
-                            <Input
-                              id="api-hour"
-                              type="number"
-                              min="1"
-                              value={settings.api.rate_limit_api_key_per_hour}
-                              onChange={(e) => updateSetting("api", "rate_limit_api_key_per_hour", parseInt(e.target.value))}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <h4 className="font-medium text-sm text-muted-foreground">Premium Users</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label htmlFor="premium-minute">Per Minute</Label>
-                            <Input
-                              id="premium-minute"
-                              type="number"
-                              min="1"
-                              value={settings.api.rate_limit_premium_per_minute}
-                              onChange={(e) => updateSetting("api", "rate_limit_premium_per_minute", parseInt(e.target.value))}
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="premium-hour">Per Hour</Label>
-                            <Input
-                              id="premium-hour"
-                              type="number"
-                              min="1"
-                              value={settings.api.rate_limit_premium_per_hour}
-                              onChange={(e) => updateSetting("api", "rate_limit_premium_per_hour", parseInt(e.target.value))}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-              {/* Request Settings */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Request Settings</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="max-request-size">Max Request Size (MB)</Label>
-                      <Input
-                        id="max-request-size"
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={settings.api.max_request_size_mb}
-                        onChange={(e) => updateSetting("api", "max_request_size_mb", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="max-request-size-premium">Max Request Size Premium (MB)</Label>
-                      <Input
-                        id="max-request-size-premium"
-                        type="number"
-                        min="1"
-                        max="500"
-                        value={settings.api.max_request_size_premium_mb}
-                        onChange={(e) => updateSetting("api", "max_request_size_premium_mb", parseInt(e.target.value))}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="api-key-expiry">API Key Expiry (days)</Label>
-                      <Input
-                        id="api-key-expiry"
-                        type="number"
-                        min="1"
-                        max="365"
-                        value={settings.api.api_key_expiry_days}
-                        onChange={(e) => updateSetting("api", "api_key_expiry_days", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        checked={settings.api.enable_cors}
-                        onCheckedChange={(checked) => updateSetting("api", "enable_cors", checked)}
-                      />
-                      <Label>Enable CORS</Label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* CORS Settings */}
-              {settings.api.enable_cors && (
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="cors-origins">CORS Origins (one per line)</Label>
-                    <Textarea
-                      id="cors-origins"
-                      value={settings.api.cors_origins.join('\n')}
-                      onChange={(e) => updateSetting("api", "cors_origins", e.target.value.split('\n').filter(o => o.trim()))}
-                      placeholder="https://example.com&#10;https://app.company.org"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <Button
-                onClick={() => handleSaveSection("api")}
-                disabled={saving === "api"}
-              >
-                <Save className="mr-2 h-4 w-4" />
-                {saving === "api" ? "Saving..." : "Save API Settings"}
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="notifications" className="space-y-6">
           <Card>

@@ -7,7 +7,7 @@ import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional, Union
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import redis.asyncio as redis
 from redis.asyncio import Redis, ConnectionPool
 from contextlib import asynccontextmanager
@@ -263,7 +263,7 @@ class CoreCacheService:
         verification_data = {
             "key_hash": key_hash,
             "is_valid": is_valid,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         return await self.set(
             f"verify:{key_prefix}", verification_data, ttl, prefix="auth"
@@ -289,7 +289,7 @@ class CoreCacheService:
 
             remaining = max(0, limit - count)
             reset_time = int(
-                (datetime.utcnow() + timedelta(seconds=window_seconds)).timestamp()
+                (datetime.now(timezone.utc) + timedelta(seconds=window_seconds)).timestamp()
             )
 
             return {
@@ -307,7 +307,7 @@ class CoreCacheService:
                 "limit": limit,
                 "remaining": limit,
                 "reset_time": int(
-                    (datetime.utcnow() + timedelta(seconds=window_seconds)).timestamp()
+                    (datetime.now(timezone.utc) + timedelta(seconds=window_seconds)).timestamp()
                 ),
                 "exceeded": False,
             }

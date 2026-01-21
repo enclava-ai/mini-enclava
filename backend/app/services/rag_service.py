@@ -10,7 +10,7 @@ import mimetypes
 import logging
 from typing import List, Optional, Dict, Any, Tuple
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -236,9 +236,9 @@ class RAGService:
                         }
                     else:
                         # Collection exists in Qdrant but not in our metadata
-                        from datetime import datetime
+                        from datetime import datetime, timezone
 
-                        now = datetime.utcnow()
+                        now = datetime.now(timezone.utc)
                         collection_data = {
                             "id": f"ext_{qdrant_name}",  # External identifier
                             "name": qdrant_name,
@@ -260,9 +260,9 @@ class RAGService:
                 except Exception as e:
                     logger.error(f"Error processing collection {qdrant_name}: {e}")
                     # Still add the collection but with minimal info
-                    from datetime import datetime
+                    from datetime import datetime, timezone
 
-                    now = datetime.utcnow()
+                    now = datetime.now(timezone.utc)
                     collection_data = {
                         "id": f"ext_{qdrant_name}",
                         "name": qdrant_name,
@@ -339,7 +339,7 @@ class RAGService:
             for document in documents:
                 # Soft delete document
                 document.is_deleted = True
-                document.deleted_at = datetime.utcnow()
+                document.deleted_at = datetime.now(timezone.utc)
 
                 # Delete physical file if it exists
                 try:
@@ -352,7 +352,7 @@ class RAGService:
 
         # Soft delete collection
         collection.is_active = False
-        collection.updated_at = datetime.utcnow()
+        collection.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
 
@@ -478,8 +478,8 @@ class RAGService:
 
         # Soft delete document
         document.is_deleted = True
-        document.deleted_at = datetime.utcnow()
-        document.updated_at = datetime.utcnow()
+        document.deleted_at = datetime.now(timezone.utc)
+        document.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
 
@@ -734,7 +734,7 @@ class RAGService:
                 "qdrant_host": settings.QDRANT_HOST,
                 "qdrant_port": settings.QDRANT_PORT,
                 "collections_count": collection_count,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except ImportError:
@@ -742,7 +742,7 @@ class RAGService:
                 "status": "unavailable",
                 "error": "Qdrant client not installed",
                 "recommendation": "Install qdrant-client package",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -751,7 +751,7 @@ class RAGService:
                 "error": str(e),
                 "qdrant_host": settings.QDRANT_HOST,
                 "qdrant_port": settings.QDRANT_PORT,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def _update_collection_stats(self, collection_id: int):
@@ -787,7 +787,7 @@ class RAGService:
             collection.document_count = doc_count
             collection.size_bytes = total_size
             collection.vector_count = vector_count
-            collection.updated_at = datetime.utcnow()
+            collection.updated_at = datetime.now(timezone.utc)
 
             await self.db.commit()
 
@@ -908,7 +908,7 @@ class RAGService:
                         document.character_count = len(processed_doc.content)
                         document.document_metadata = processed_doc.metadata
                         document.status = "processed"
-                        document.processed_at = datetime.utcnow()
+                        document.processed_at = datetime.now(timezone.utc)
 
                         # Index the processed document in the correct Qdrant collection
                         try:
@@ -938,7 +938,7 @@ class RAGService:
                                 1, len(processed_doc.content) // 500
                             )  # ~500 chars per chunk
                             document.status = "indexed"
-                            document.indexed_at = datetime.utcnow()
+                            document.indexed_at = datetime.now(timezone.utc)
 
                         except Exception as index_error:
                             logger.error(
@@ -955,7 +955,7 @@ class RAGService:
                             collection.document_count += 1
                             collection.size_bytes += document.file_size
                             collection.vector_count += document.vector_count
-                            collection.updated_at = datetime.utcnow()
+                            collection.updated_at = datetime.now(timezone.utc)
 
                     except Exception as e:
                         # Error case - mark document as failed
@@ -1003,7 +1003,7 @@ class RAGService:
             document.processing_error = None
             document.processed_at = None
             document.indexed_at = None
-            document.updated_at = datetime.utcnow()
+            document.updated_at = datetime.now(timezone.utc)
 
             await self.db.commit()
 

@@ -15,7 +15,7 @@ Tests comprehensive budget API functionality:
 
 import pytest
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from httpx import AsyncClient
@@ -82,7 +82,7 @@ class TestBudgetEndpoints:
             current_usage=25.50,
             period_type="monthly",
             is_active=True,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
     
     @pytest.fixture
@@ -507,14 +507,14 @@ class TestBudgetEndpoints:
                 id=1,
                 budget_id=budget_id,
                 amount=10.50,
-                timestamp=datetime.utcnow() - timedelta(days=1),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=1),
                 request_type="chat_completion"
             ),
             UsageTracking(
                 id=2,
                 budget_id=budget_id,
                 amount=15.00,
-                timestamp=datetime.utcnow() - timedelta(days=2),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=2),
                 request_type="embedding"
             )
         ]

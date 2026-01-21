@@ -1,7 +1,7 @@
 """
 User model
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from enum import Enum
 from sqlalchemy import (
@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy import inspect as sa_inspect
-from app.db.database import Base
+from app.db.database import Base, utc_now
 from decimal import Decimal
 
 
@@ -54,9 +54,9 @@ class User(Base):
     company = Column(String, nullable=True)
     website = Column(String, nullable=True)
 
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Timestamps (using naive UTC datetimes for TIMESTAMP WITHOUT TIME ZONE columns)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     last_login = Column(DateTime, nullable=True)
 
     # Settings
@@ -187,7 +187,7 @@ class User(Base):
 
     def update_last_login(self):
         """Update the last login timestamp"""
-        self.last_login = datetime.utcnow()
+        self.last_login = utc_now()
 
     def update_preferences(self, preferences: dict):
         """Update user preferences"""
@@ -263,10 +263,8 @@ class User(Base):
 
     def lock_account(self, duration_hours: int = 24):
         """Lock user account for specified duration"""
-        from datetime import timedelta
-
         self.account_locked = True
-        self.account_locked_until = datetime.utcnow() + timedelta(hours=duration_hours)
+        self.account_locked_until = utc_now() + timedelta(hours=duration_hours)
 
     def unlock_account(self):
         """Unlock user account"""
@@ -277,7 +275,7 @@ class User(Base):
     def record_failed_login(self):
         """Record a failed login attempt"""
         self.failed_login_attempts += 1
-        self.last_failed_login = datetime.utcnow()
+        self.last_failed_login = utc_now()
 
         # Lock account after 5 failed attempts
         if self.failed_login_attempts >= 5:

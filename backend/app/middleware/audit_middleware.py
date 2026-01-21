@@ -6,7 +6,7 @@ import time
 import json
 import logging
 from typing import Callable, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -56,7 +56,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
             "query_params": dict(request.query_params),
             "ip_address": self._get_client_ip(request),
             "user_agent": request.headers.get("user-agent"),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         # Process request

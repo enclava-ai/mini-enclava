@@ -6,7 +6,7 @@ Handles async document processing with queue management
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,7 +42,7 @@ class ProcessingTask:
 
     def __post_init__(self):
         if self.created_at is None:
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(timezone.utc)
 
 
 class DocumentProcessor:
@@ -230,7 +230,7 @@ class DocumentProcessor:
 
     async def _process_document(self, task: ProcessingTask) -> bool:
         """Process a single document"""
-        from datetime import datetime
+        from datetime import datetime, timezone
         from app.db.database import async_session_factory
 
         async with async_session_factory() as session:
@@ -313,7 +313,7 @@ class DocumentProcessor:
                         "processed": "jsonl",
                     }
                     document.status = ProcessingStatus.PROCESSED
-                    document.processed_at = datetime.utcnow()
+                    document.processed_at = datetime.now(timezone.utc)
                     logger.info(
                         f"JSONL document {task.document_id} marked for optimized processing"
                     )
@@ -339,7 +339,7 @@ class DocumentProcessor:
                         document.character_count = len(processed_doc.content)
                         document.document_metadata = processed_doc.metadata
                         document.status = ProcessingStatus.PROCESSED
-                        document.processed_at = datetime.utcnow()
+                        document.processed_at = datetime.now(timezone.utc)
                     except asyncio.TimeoutError:
                         logger.error(
                             f"Document processing timed out for document {task.document_id}"
@@ -372,11 +372,11 @@ class DocumentProcessor:
                         if document.file_type == "jsonl":
                             # Create a ProcessedDocument for the JSONL processor
                             from app.modules.rag.main import ProcessedDocument
-                            from datetime import datetime
+                            from datetime import datetime, timezone
                             import hashlib
 
                             # Calculate file hash
-                            processed_at = datetime.utcnow()
+                            processed_at = datetime.now(timezone.utc)
                             file_hash = hashlib.md5(
                                 str(document.id).encode()
                             ).hexdigest()
@@ -433,7 +433,7 @@ class DocumentProcessor:
                             1, len(document.converted_content) // 1000
                         )
                         document.status = ProcessingStatus.INDEXED
-                        document.indexed_at = datetime.utcnow()
+                        document.indexed_at = datetime.now(timezone.utc)
 
                         # Update collection stats
                         collection = document.collection
@@ -441,7 +441,7 @@ class DocumentProcessor:
                             collection.document_count += 1
                             collection.size_bytes += document.file_size
                             collection.vector_count += document.vector_count
-                            collection.updated_at = datetime.utcnow()
+                            collection.updated_at = datetime.now(timezone.utc)
 
                     except Exception as e:
                         logger.error(

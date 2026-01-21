@@ -1,12 +1,12 @@
 """
 Role model for hierarchical permission management
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class RoleLevel(str, Enum):
@@ -44,8 +44,8 @@ class Role(Base):
     is_system_role = Column(Boolean, default=False)  # System roles cannot be deleted
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     users = relationship("User", back_populates="role")

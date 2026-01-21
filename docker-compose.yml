@@ -22,6 +22,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      network: host
+      args:
+        BUILD_DNS_SERVERS: "${BUILD_DNS_SERVERS:-10.0.2.3 10.88.0.1 1.1.1.1 8.8.8.8}"
     environment:
       - DATABASE_URL=postgresql://enclava_user:enclava_pass@enclava-postgres:5432/enclava_db
       - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
@@ -45,6 +48,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      network: host
+      args:
+        BUILD_DNS_SERVERS: "${BUILD_DNS_SERVERS:-10.0.2.3 10.88.0.1 1.1.1.1 8.8.8.8}"
     environment:
       - DATABASE_URL=postgresql://enclava_user:enclava_pass@enclava-postgres:5432/enclava_db
       - REDIS_URL=redis://enclava-redis:6379

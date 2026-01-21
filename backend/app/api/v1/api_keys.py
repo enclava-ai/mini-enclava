@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 import secrets
 import string
@@ -537,14 +537,18 @@ async def delete_api_key(
     # Extract deletion reason from request body
     reason = delete_request.reason if delete_request else None
 
+    # SECURITY FIX #8: Invalidate cache BEFORE commit to prevent race condition
+    # Previously, there was a window between commit and cache invalidation where
+    # a deleted key could still authenticate from stale cache data
+    from app.services.cached_api_key import cached_api_key_service
+
+    # Invalidate cache first - if this fails, the key remains valid (safe failure mode)
+    # If commit fails after this, the cache will be repopulated on next auth attempt
+    await cached_api_key_service.invalidate_api_key_cache(api_key.key_prefix)
+
     # Soft delete API key (preserves for billing)
     api_key.soft_delete(deleted_by_user_id=current_user["id"], reason=reason)
     await db.commit()
-
-    # Invalidate API key cache
-    from app.services.cached_api_key import cached_api_key_service
-
-    await cached_api_key_service.invalidate_api_key_cache(api_key.key_prefix)
 
     # Log audit event
     await log_audit_event(
@@ -645,7 +649,7 @@ async def get_api_key_usage(
     # Calculate usage statistics
     from app.models.usage_tracking import UsageTracking
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     hour_start = now.replace(minute=0, second=0, microsecond=0)
 

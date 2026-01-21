@@ -19,7 +19,7 @@ import logging
 import sys
 import time
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Setup logging
@@ -70,7 +70,7 @@ class PlatformTester:
             "success": success,
             "details": details,
             "data": data or {},
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
         
         if success:
@@ -479,7 +479,7 @@ class PlatformTester:
             # Create test document for upload
             test_content = f"""# Test Document for RAG System
             
-This is a comprehensive test document created at {datetime.utcnow().isoformat()}.
+This is a comprehensive test document created at {datetime.now(timezone.utc).isoformat()}.
 
 ## Introduction
 This document contains various types of content to test the RAG system's ability to:

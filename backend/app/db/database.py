@@ -10,6 +10,7 @@ Pool monitoring is available via get_pool_status() function.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import AsyncGenerator, Dict, Any
 from sqlalchemy import create_engine, MetaData, event
 from sqlalchemy.exc import SQLAlchemyError
@@ -88,6 +89,20 @@ SessionLocal = sessionmaker(
 
 # Create base class for models
 Base = declarative_base()
+
+
+def utc_now() -> datetime:
+    """
+    Return current UTC time as a naive datetime (no timezone info).
+
+    This is required because our database columns use TIMESTAMP WITHOUT TIME ZONE.
+    PostgreSQL/asyncpg cannot accept timezone-aware Python datetimes for these columns.
+
+    Usage in models:
+        from app.db.database import Base, utc_now
+        created_at = Column(DateTime, default=utc_now)
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ============================================================================

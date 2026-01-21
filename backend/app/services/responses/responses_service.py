@@ -8,7 +8,7 @@ budget enforcement, and state management.
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -478,7 +478,7 @@ class ResponsesService:
         """
         try:
             # Calculate TTL
-            expires_at = datetime.utcnow() + Response.get_default_ttl()
+            expires_at = datetime.now(timezone.utc) + Response.get_default_ttl()
 
             response = Response(
                 id=response_obj.id,
@@ -498,7 +498,7 @@ class ResponsesService:
                 total_tokens=response_obj.usage.total_tokens,
                 store=True,
                 response_metadata=response_obj.metadata,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 expires_at=expires_at
             )
 

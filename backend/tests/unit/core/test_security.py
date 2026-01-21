@@ -14,7 +14,7 @@ Tests comprehensive security functionality:
 
 import pytest
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch, AsyncMock
 from app.core.security import SecurityService, get_current_user, verify_api_key
 from app.models.user import User
@@ -39,7 +39,7 @@ class TestSecurityService:
             email="test@example.com",
             password_hash="$2b$12$hashed_password_here",
             is_active=True,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
     
     @pytest.fixture
@@ -52,7 +52,7 @@ class TestSecurityService:
             key_prefix="ce_test",
             hashed_key="$2b$12$hashed_api_key_here",
             is_active=True,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             last_used_at=None
         )
 

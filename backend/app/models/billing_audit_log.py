@@ -8,7 +8,7 @@ This model provides a centralized audit trail for all billing-related changes:
 - Usage record corrections (rare manual adjustments)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from enum import Enum
 from uuid import UUID
@@ -25,7 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB, INET
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class EntityType(str, Enum):
@@ -125,7 +125,7 @@ class BillingAuditLog(Base):
     related_user_id = Column(Integer, nullable=True)
 
     # Timestamp
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     # Relationships
     actor_user = relationship("User", foreign_keys=[actor_user_id])

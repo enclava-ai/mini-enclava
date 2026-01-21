@@ -2,7 +2,7 @@
 Permissions Module
 Role-based access control decorators and utilities
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from typing import List, Optional, Union, Callable
 from fastapi import HTTPException, status, Depends
@@ -41,7 +41,7 @@ def require_permission(
 
     # Check if account is locked
     if user.account_locked:
-        if user.account_locked_until and user.account_locked_until > datetime.utcnow():
+        if user.account_locked_until and user.account_locked_until > datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is temporarily locked",

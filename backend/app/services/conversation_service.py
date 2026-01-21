@@ -4,7 +4,7 @@ Handles chatbot conversation management including history loading,
 message persistence, and conversation lifecycle.
 """
 from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 from sqlalchemy.orm import selectinload
@@ -54,14 +54,14 @@ class ConversationService:
 
         # Create new conversation
         if not title:
-            title = f"Chat {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+            title = f"Chat {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
 
         conversation = ChatbotConversation(
             chatbot_id=chatbot_id,
             user_id=user_id,
             title=title,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             is_active=True,
             context_data={},
         )
@@ -148,7 +148,7 @@ class ConversationService:
             conversation_id=conversation_id,
             role=role,
             content=content,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             message_metadata=metadata or {},
             sources=sources,
         )
@@ -163,7 +163,7 @@ class ConversationService:
         conversation = result.scalar_one_or_none()
 
         if conversation:
-            conversation.updated_at = datetime.utcnow()
+            conversation.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(message)
@@ -212,7 +212,7 @@ class ConversationService:
     async def archive_old_conversations(self, days_inactive: int = 30) -> int:
         """Archive conversations that haven't been used in specified days"""
 
-        cutoff_date = datetime.utcnow() - timedelta(days=days_inactive)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_inactive)
 
         # Find conversations to archive
         stmt = select(ChatbotConversation).where(

@@ -5,7 +5,7 @@ Prompt Template Models for customizable chatbot prompts
 from sqlalchemy import Column, String, Text, DateTime, Boolean, Integer
 from sqlalchemy.sql import func
 from app.db.database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class PromptTemplate(Base):

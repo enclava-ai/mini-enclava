@@ -1,7 +1,7 @@
 """
 Audit log model for tracking system events and user actions
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from sqlalchemy import (
     Column,
@@ -14,7 +14,7 @@ from sqlalchemy import (
     Boolean,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 from enum import Enum
 
 
@@ -96,7 +96,7 @@ class AuditLog(Base):
     new_values = Column(JSON, nullable=True)
 
     # Timestamp
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now, index=True)
 
     def __repr__(self):
         return (

@@ -12,7 +12,7 @@ Provides AI chatbot capabilities with:
 import json
 from pprint import pprint
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Union
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
@@ -584,7 +584,7 @@ class ChatbotModule(BaseModule):
                 db.refresh(assistant_message)
 
             # Update conversation timestamp
-            conversation.updated_at = datetime.utcnow()
+            conversation.updated_at = datetime.now(timezone.utc)
             db.commit()
 
             return ChatResponse(
@@ -1282,7 +1282,7 @@ class ChatbotModule(BaseModule):
                         conversation_id=0,
                         role="user",
                         content=message,
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                         metadata={},
                     )
                 ]

@@ -4,7 +4,7 @@ Usage Statistics API Endpoints
 Internal API endpoints for querying usage statistics and records.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

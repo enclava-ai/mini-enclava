@@ -2,7 +2,7 @@
 Response model for storing Responses API interactions
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import (
     Column,
     Integer,
@@ -15,7 +15,7 @@ from sqlalchemy import (
     Index,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class Response(Base):
@@ -68,7 +68,7 @@ class Response(Base):
     response_metadata = Column(JSON, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)
 
     # TTL and archival
     expires_at = Column(DateTime, nullable=True, index=True)  # TTL expiration
@@ -142,7 +142,7 @@ class Response(Base):
         """Check if response has expired based on TTL."""
         if not self.expires_at:
             return False
-        return datetime.utcnow() > self.expires_at
+        return utc_now() > self.expires_at
 
     def is_archived(self) -> bool:
         """Check if response is archived."""
@@ -150,7 +150,7 @@ class Response(Base):
 
     def archive(self):
         """Mark response as archived."""
-        self.archived_at = datetime.utcnow()
+        self.archived_at = utc_now()
 
     @staticmethod
     def get_default_ttl() -> timedelta:

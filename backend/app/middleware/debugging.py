@@ -3,7 +3,7 @@ Debugging middleware for detailed request/response logging
 """
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -70,7 +70,7 @@ class DebuggingMiddleware(BaseHTTPMiddleware):
                 "headers": {k: v for k, v in headers_to_log.items() if v is not None},
                 "body": request_body,
                 "client_ip": request.client.host if request.client else None,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -82,7 +82,7 @@ class DebuggingMiddleware(BaseHTTPMiddleware):
         # Add timeout detection
         try:
             logger.info(
-                f"=== START PROCESSING REQUEST === {request_id} at {datetime.utcnow().isoformat()}"
+                f"=== START PROCESSING REQUEST === {request_id} at {datetime.now(timezone.utc).isoformat()}"
             )
             logger.info(f"Request path: {request.url.path}")
             logger.info(f"Request method: {request.method}")
@@ -96,7 +96,7 @@ class DebuggingMiddleware(BaseHTTPMiddleware):
 
             response = await call_next(request)
             logger.info(
-                f"=== REQUEST COMPLETED === {request_id} at {datetime.utcnow().isoformat()}"
+                f"=== REQUEST COMPLETED === {request_id} at {datetime.now(timezone.utc).isoformat()}"
             )
 
             # Capture response body for successful JSON responses
@@ -133,7 +133,7 @@ class DebuggingMiddleware(BaseHTTPMiddleware):
                 "duration_ms": round(duration, 2),
                 "response_body": response_body,
                 "response_headers": dict(response.headers),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 

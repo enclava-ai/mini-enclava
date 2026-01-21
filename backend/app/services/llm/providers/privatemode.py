@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 from typing import List, Dict, Any, Optional, AsyncGenerator
-from datetime import datetime
+from datetime import datetime, timezone
 
 import aiohttp
 
@@ -104,7 +104,7 @@ class PrivateModeProvider(BaseLLMProvider):
                         status="healthy",
                         latency_ms=latency,
                         success_rate=1.0,
-                        last_check=datetime.utcnow(),
+                        last_check=datetime.now(timezone.utc),
                         models_available=models,
                     )
                 else:
@@ -114,7 +114,7 @@ class PrivateModeProvider(BaseLLMProvider):
                         status="degraded",
                         latency_ms=latency,
                         success_rate=0.0,
-                        last_check=datetime.utcnow(),
+                        last_check=datetime.now(timezone.utc),
                         error_message=f"HTTP {response.status}: {error_text}",
                         models_available=[],
                     )
@@ -128,7 +128,7 @@ class PrivateModeProvider(BaseLLMProvider):
                 status="unavailable",
                 latency_ms=latency,
                 success_rate=0.0,
-                last_check=datetime.utcnow(),
+                last_check=datetime.now(timezone.utc),
                 error_message=str(e),
                 models_available=[],
             )
@@ -264,7 +264,7 @@ class PrivateModeProvider(BaseLLMProvider):
             payload["metadata"] = {
                 "user_id": request.user_id,
                 "api_key_id": request.api_key_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "enclava_request_id": str(uuid.uuid4()),
                 **(request.metadata or {}),
             }
@@ -474,7 +474,7 @@ class PrivateModeProvider(BaseLLMProvider):
             payload["metadata"] = {
                 "user_id": request.user_id,
                 "api_key_id": request.api_key_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 **(request.metadata or {}),
             }
 

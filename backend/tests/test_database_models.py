@@ -3,7 +3,7 @@ Database model tests for all SQLAlchemy models
 """
 import pytest
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -277,7 +277,7 @@ class TestAPIKeyModel:
             key_hash=get_password_hash("expired_key"),
             key_prefix="ak_expired",
             user_id=user.id,
-            expires_at=datetime.utcnow() - timedelta(days=1)
+            expires_at=datetime.now(timezone.utc) - timedelta(days=1)
         )
         
         # Create active API key
@@ -286,15 +286,15 @@ class TestAPIKeyModel:
             key_hash=get_password_hash("active_key"), 
             key_prefix="ak_active",
             user_id=user.id,
-            expires_at=datetime.utcnow() + timedelta(days=30)
+            expires_at=datetime.now(timezone.utc) + timedelta(days=30)
         )
         
         test_db.add_all([expired_key, active_key])
         test_db.commit()
         
         # Test expiration check (would need is_expired property)
-        assert expired_key.expires_at < datetime.utcnow()
-        assert active_key.expires_at > datetime.utcnow()
+        assert expired_key.expires_at < datetime.now(timezone.utc)
+        assert active_key.expires_at > datetime.now(timezone.utc)
     
     def test_api_key_permissions_json(self, test_db):
         """Test API key permissions as JSON array"""

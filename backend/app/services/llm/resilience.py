@@ -10,7 +10,7 @@ import time
 from typing import Callable, Any, Optional, Dict, Type, AsyncGenerator
 from enum import Enum
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from .exceptions import LLMError, TimeoutError, RateLimitError
 from .models import ResilienceConfig
@@ -54,7 +54,7 @@ class CircuitBreaker:
         if self.state == CircuitBreakerState.OPEN:
             # Check if reset timeout has passed
             if (
-                datetime.utcnow() - self.stats.state_change_time
+                datetime.now(timezone.utc) - self.stats.state_change_time
             ).total_seconds() * 1000 > self.config.circuit_breaker_reset_timeout_ms:
                 self._transition_to_half_open()
                 return True
@@ -68,7 +68,7 @@ class CircuitBreaker:
     def record_success(self):
         """Record successful request"""
         self.stats.success_count += 1
-        self.stats.last_success_time = datetime.utcnow()
+        self.stats.last_success_time = datetime.now(timezone.utc)
 
         if self.state == CircuitBreakerState.HALF_OPEN:
             self._transition_to_closed()
@@ -83,7 +83,7 @@ class CircuitBreaker:
     def record_failure(self):
         """Record failed request"""
         self.stats.failure_count += 1
-        self.stats.last_failure_time = datetime.utcnow()
+        self.stats.last_failure_time = datetime.now(timezone.utc)
 
         if self.state == CircuitBreakerState.CLOSED:
             if self.stats.failure_count >= self.config.circuit_breaker_threshold:
@@ -99,7 +99,7 @@ class CircuitBreaker:
     def _transition_to_open(self):
         """Transition to OPEN state"""
         self.state = CircuitBreakerState.OPEN
-        self.stats.state_change_time = datetime.utcnow()
+        self.stats.state_change_time = datetime.now(timezone.utc)
         logger.error(
             f"Circuit breaker [{self.provider_name}]: OPENED after {self.stats.failure_count} failures"
         )
@@ -107,7 +107,7 @@ class CircuitBreaker:
     def _transition_to_half_open(self):
         """Transition to HALF_OPEN state"""
         self.state = CircuitBreakerState.HALF_OPEN
-        self.stats.state_change_time = datetime.utcnow()
+        self.stats.state_change_time = datetime.now(timezone.utc)
         logger.info(
             f"Circuit breaker [{self.provider_name}]: Transitioning to HALF_OPEN for testing"
         )
@@ -115,7 +115,7 @@ class CircuitBreaker:
     def _transition_to_closed(self):
         """Transition to CLOSED state"""
         self.state = CircuitBreakerState.CLOSED
-        self.stats.state_change_time = datetime.utcnow()
+        self.stats.state_change_time = datetime.now(timezone.utc)
         self.stats.failure_count = 0  # Reset failure count
         logger.info(
             f"Circuit breaker [{self.provider_name}]: CLOSED - service recovered"
@@ -135,7 +135,7 @@ class CircuitBreaker:
             else None,
             "state_change_time": self.stats.state_change_time.isoformat(),
             "time_in_current_state_ms": (
-                datetime.utcnow() - self.stats.state_change_time
+                datetime.now(timezone.utc) - self.stats.state_change_time
             ).total_seconds()
             * 1000,
         }

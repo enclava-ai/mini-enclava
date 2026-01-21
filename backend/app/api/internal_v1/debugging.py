@@ -1,12 +1,15 @@
 """
 Debugging API endpoints for troubleshooting chatbot issues
+
+SECURITY: These endpoints expose internal system state and should only be
+accessible to superusers/admins. (#50)
 """
 from typing import Dict, Any, List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_superuser
 from app.db.database import get_db
 from app.models.user import User
 from app.models.chatbot import ChatbotInstance
@@ -16,19 +19,46 @@ from app.models.rag_collection import RagCollection
 router = APIRouter()
 
 
+def _require_debug_access(current_user: dict) -> dict:
+    """
+    Require superuser or admin role for debug endpoint access.
+
+    Security mitigation #50: Debug endpoints should only be accessible to admins.
+    """
+    if current_user.get("is_superuser"):
+        return current_user
+
+    role = current_user.get("role")
+    if role and hasattr(role, "name"):
+        role_name = role.name
+    else:
+        role_name = role
+
+    if role_name in ("super_admin", "admin"):
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Debug endpoints require administrator privileges",
+    )
+
+
 @router.get("/chatbot/{chatbot_id}/config")
 async def get_chatbot_config_debug(
     chatbot_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """Get detailed configuration for debugging a specific chatbot"""
+    # SECURITY FIX #50: Require admin privileges for debug endpoints
+    _require_debug_access(current_user)
+    user_id = current_user.get("id")
 
     # Get chatbot instance
     chatbot = (
         db.query(ChatbotInstance)
         .filter(
-            ChatbotInstance.id == chatbot_id, ChatbotInstance.user_id == current_user.id
+            ChatbotInstance.id == chatbot_id, ChatbotInstance.user_id == user_id
         )
         .first()
     )
@@ -112,15 +142,18 @@ async def test_rag_search(
     query: str = "test query",
     top_k: int = 5,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """Test RAG search for a specific chatbot"""
+    # SECURITY FIX #50: Require admin privileges for debug endpoints
+    _require_debug_access(current_user)
+    user_id = current_user.get("id")
 
     # Get chatbot instance
     chatbot = (
         db.query(ChatbotInstance)
         .filter(
-            ChatbotInstance.id == chatbot_id, ChatbotInstance.user_id == current_user.id
+            ChatbotInstance.id == chatbot_id, ChatbotInstance.user_id == user_id
         )
         .first()
     )
@@ -175,9 +208,11 @@ async def test_rag_search(
 
 @router.get("/system/status")
 async def get_system_status(
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
     """Get system status for debugging"""
+    # SECURITY FIX #50: Require admin privileges for debug endpoints
+    _require_debug_access(current_user)
 
     # Check database connectivity
     try:

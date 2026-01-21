@@ -11,7 +11,7 @@ Small budget overages (by the cost of one request) are acceptable.
 """
 
 from typing import Optional, List, Tuple, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, select
 
@@ -141,8 +141,9 @@ class BudgetEnforcementService:
 
         except Exception as e:
             logger.error(f"Error checking budget compliance: {e}")
-            # Allow request on error to avoid blocking legitimate usage
-            return True, None, []
+            # SECURITY FIX #3: Fail closed - deny requests when budget checks fail
+            # This prevents abuse when the budget system is unavailable
+            return False, "Budget verification unavailable. Request denied for safety.", []
 
     def record_usage(
         self,
@@ -361,7 +362,7 @@ class BudgetEnforcementService:
                     and_(
                         Budget.is_active == True,
                         Budget.auto_renew == True,
-                        Budget.period_end < datetime.utcnow(),
+                        Budget.period_end < datetime.now(timezone.utc),
                     )
                 )
                 .all()

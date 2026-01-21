@@ -10,7 +10,7 @@ Tests cover:
 
 import pytest
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from app.modules.rag.main import ProcessedDocument, RAGModule
 
 
@@ -179,7 +179,7 @@ class TestProcessedDocument:
             entities=[],
             keywords=["test"],
             processing_time=0.5,
-            processed_at=datetime.utcnow(),
+            processed_at=datetime.now(timezone.utc),
             file_hash="abc123",
             file_size=100,
             source_url="https://example.com/faq/article"
@@ -204,7 +204,7 @@ class TestProcessedDocument:
             entities=[],
             keywords=["test"],
             processing_time=0.5,
-            processed_at=datetime.utcnow(),
+            processed_at=datetime.now(timezone.utc),
             file_hash="def456",
             file_size=100
         )
@@ -228,7 +228,7 @@ class TestProcessedDocument:
             entities=[],
             keywords=["test"],
             processing_time=0.5,
-            processed_at=datetime.utcnow(),
+            processed_at=datetime.now(timezone.utc),
             file_hash="ghi789",
             file_size=100,
             source_url=source_url

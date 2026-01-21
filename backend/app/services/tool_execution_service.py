@@ -9,7 +9,7 @@ import os
 import tempfile
 import time
 from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import docker
 from docker.errors import DockerException, ContainerError, ImageNotFound
 import psutil
@@ -72,7 +72,7 @@ class ToolExecutionService:
         try:
             # Update status to running
             execution.status = ToolStatus.RUNNING
-            execution.started_at = datetime.utcnow()
+            execution.started_at = datetime.now(timezone.utc)
             await self.db.commit()
 
             # Execute based on tool type
@@ -99,7 +99,7 @@ class ToolExecutionService:
             logger.error(f"Tool execution failed: {e}")
             execution.status = ToolStatus.FAILED
             execution.error_message = str(e)
-            execution.completed_at = datetime.utcnow()
+            execution.completed_at = datetime.now(timezone.utc)
             await self.db.commit()
 
         await self.db.refresh(execution)
@@ -189,7 +189,7 @@ class ToolExecutionService:
                     execution.error_message = (
                         f"Tool execution timed out after {timeout} seconds"
                     )
-                    execution.completed_at = datetime.utcnow()
+                    execution.completed_at = datetime.now(timezone.utc)
                     return
 
                 # Get output and logs
@@ -244,7 +244,7 @@ class ToolExecutionService:
                     except Exception as e:
                         logger.warning(f"Failed to remove container: {e}")
 
-                execution.completed_at = datetime.utcnow()
+                execution.completed_at = datetime.now(timezone.utc)
                 if execution.started_at:
                     duration = execution.completed_at - execution.started_at
                     execution.execution_time_ms = int(duration.total_seconds() * 1000)
@@ -362,7 +362,7 @@ export TOOL_PARAMETERS='{json.dumps(parameters)}'
 
         # Update execution status
         execution.status = ToolStatus.CANCELLED
-        execution.completed_at = datetime.utcnow()
+        execution.completed_at = datetime.now(timezone.utc)
         execution.error_message = "Execution cancelled by user"
 
         await self.db.commit()
@@ -419,7 +419,7 @@ export TOOL_PARAMETERS='{json.dumps(parameters)}'
 
     async def cleanup_old_executions(self, days_old: int = 30):
         """Clean up old execution records and containers"""
-        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
 
         # Get old executions
         stmt = select(ToolExecution).where(

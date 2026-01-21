@@ -2,7 +2,7 @@
 Analytics middleware for automatic request tracking
 """
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -126,7 +126,7 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
 
         # Create analytics event
         event = RequestEvent(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             method=request.method,
             path=request.url.path,
             status_code=response.status_code if response else 500,

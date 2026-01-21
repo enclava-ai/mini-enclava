@@ -15,7 +15,7 @@ Tests comprehensive LLM API functionality:
 
 import pytest
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from httpx import AsyncClient
 from fastapi import status
@@ -80,7 +80,7 @@ class TestLLMEndpoints:
             name="Test API Key",
             key_prefix="ce_test",
             is_active=True,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
     
     @pytest.fixture

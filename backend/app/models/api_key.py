@@ -1,11 +1,12 @@
 """
 API Key model
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from sqlalchemy import (
     Column,
     Integer,
+    BigInteger,
     String,
     DateTime,
     Boolean,
@@ -14,7 +15,7 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class APIKey(Base):
@@ -64,8 +65,8 @@ class APIKey(Base):
     tags = Column(JSON, default=list)  # For organizing keys
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     last_used_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=True)  # Optional expiration
 
@@ -74,10 +75,11 @@ class APIKey(Base):
     deleted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     deletion_reason = Column(Text, nullable=True)
 
+    # SECURITY FIX #35: Use BigInteger for counters to prevent overflow
     # Usage tracking
-    total_requests = Column(Integer, default=0)
-    total_tokens = Column(Integer, default=0)
-    total_cost = Column(Integer, default=0)  # In cents
+    total_requests = Column(BigInteger, default=0)
+    total_tokens = Column(BigInteger, default=0)
+    total_cost = Column(BigInteger, default=0)  # In cents
 
     # Relationships
     usage_tracking = relationship(
@@ -152,7 +154,7 @@ class APIKey(Base):
         """Check if the API key has expired"""
         if self.expires_at is None:
             return False
-        return datetime.utcnow() > self.expires_at
+        return utc_now() > self.expires_at
 
     def is_valid(self) -> bool:
         """Check if the API key is valid, active, and not deleted"""
@@ -202,23 +204,23 @@ class APIKey(Base):
         self.total_requests += 1
         self.total_tokens += tokens_used
         self.total_cost += cost_cents
-        self.last_used_at = datetime.utcnow()
+        self.last_used_at = utc_now()
 
     def set_expiration(self, days: int):
         """Set expiration date in days from now"""
-        self.expires_at = datetime.utcnow() + timedelta(days=days)
+        self.expires_at = utc_now() + timedelta(days=days)
 
     def extend_expiration(self, days: int):
         """Extend expiration date by specified days"""
         if self.expires_at is None:
-            self.expires_at = datetime.utcnow() + timedelta(days=days)
+            self.expires_at = utc_now() + timedelta(days=days)
         else:
             self.expires_at = self.expires_at + timedelta(days=days)
 
     def revoke(self):
         """Revoke the API key"""
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def soft_delete(self, deleted_by_user_id: int, reason: str = None):
         """
@@ -228,11 +230,11 @@ class APIKey(Base):
         - Sets is_active to False
         - Stores deletion_reason
         """
-        self.deleted_at = datetime.utcnow()
+        self.deleted_at = utc_now()
         self.deleted_by_user_id = deleted_by_user_id
         self.deletion_reason = reason
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def restore(self):
         """
@@ -245,7 +247,7 @@ class APIKey(Base):
         self.deleted_at = None
         self.deleted_by_user_id = None
         self.deletion_reason = None
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def add_scope(self, scope: str):
         """Add a scope to the API key"""

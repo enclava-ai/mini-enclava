@@ -24,6 +24,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
+      network: host
+      args:
+        BUILD_DNS_SERVERS: "${BUILD_DNS_SERVERS:-10.0.2.3 10.88.0.1 1.1.1.1 8.8.8.8}"
     env_file:
       - ./.env
     environment:
@@ -40,6 +43,9 @@ services:
     build: 
       context: ./backend
       dockerfile: Dockerfile.prod
+      network: host
+      args:
+        BUILD_DNS_SERVERS: "${BUILD_DNS_SERVERS:-10.0.2.3 10.88.0.1 1.1.1.1 8.8.8.8}"
     env_file:
       - ./.env
     environment:
@@ -78,6 +84,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: runner  # Use the production stage from multi-stage build
+      network: host
     env_file:
       - ./.env
     environment:

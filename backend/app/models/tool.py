@@ -1,7 +1,7 @@
 """
 Tool model for custom tool execution
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from sqlalchemy import (
@@ -16,7 +16,7 @@ from sqlalchemy import (
     Float,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class ToolType(str, Enum):
@@ -82,8 +82,8 @@ class Tool(Base):
     is_active = Column(Boolean, default=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     created_by = relationship("User", back_populates="created_tools")
@@ -125,7 +125,7 @@ class Tool(Base):
     def increment_usage(self):
         """Increment usage count and update last used timestamp"""
         self.usage_count += 1
-        self.last_used_at = datetime.utcnow()
+        self.last_used_at = utc_now()
 
     def can_be_used_by(self, user) -> bool:
         """Check if user can use this tool"""
@@ -176,7 +176,7 @@ class ToolExecution(Base):
     # Timestamps
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Relationships
     tool = relationship("Tool", back_populates="executions")
@@ -250,8 +250,8 @@ class ToolCategory(Base):
     is_active = Column(Boolean, default=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     def __repr__(self):
         return f"<ToolCategory(id={self.id}, name='{self.name}')>"

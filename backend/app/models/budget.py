@@ -2,12 +2,13 @@
 Budget model for managing spending limits and cost control
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from enum import Enum
 from sqlalchemy import (
     Column,
     Integer,
+    BigInteger,
     String,
     DateTime,
     Boolean,
@@ -17,7 +18,7 @@ from sqlalchemy import (
     Float,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class BudgetType(str, Enum):
@@ -60,10 +61,11 @@ class Budget(Base):
         "UsageTracking", back_populates="budget", cascade="all, delete-orphan"
     )
 
+    # SECURITY FIX #35: Use BigInteger for budget counters to prevent overflow
     # Budget limits (in cents)
-    limit_cents = Column(Integer, nullable=False)  # Maximum spend limit
+    limit_cents = Column(BigInteger, nullable=False)  # Maximum spend limit
     warning_threshold_cents = Column(
-        Integer, nullable=True
+        BigInteger, nullable=True
     )  # Warning threshold (e.g., 80% of limit)
 
     # Time period settings
@@ -73,8 +75,8 @@ class Budget(Base):
     period_start = Column(DateTime, nullable=False)  # Start of current period
     period_end = Column(DateTime, nullable=False)  # End of current period
 
-    # Current usage (in cents)
-    current_usage_cents = Column(Integer, default=0)  # Spent in current period
+    # Current usage (in cents) - BigInteger to prevent overflow
+    current_usage_cents = Column(BigInteger, default=0)  # Spent in current period
 
     # Budget status
     is_active = Column(Boolean, default=True)
@@ -112,8 +114,8 @@ class Budget(Base):
     notification_settings = Column(JSON, default=dict)  # Email, webhook, etc.
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     last_reset_at = Column(DateTime, nullable=True)  # Last time budget was reset
 
     # Deprecated: These fields were used for the reconciliation system which has been removed.
@@ -174,12 +176,12 @@ class Budget(Base):
 
     def is_in_period(self) -> bool:
         """Check if current time is within budget period"""
-        now = datetime.utcnow()
+        now = utc_now()
         return self.period_start <= now <= self.period_end
 
     def is_expired(self) -> bool:
         """Check if budget period has expired"""
-        return datetime.utcnow() > self.period_end
+        return utc_now() > self.period_end
 
     def can_spend(self, amount_cents: int) -> bool:
         """Check if spending amount is within budget"""
@@ -214,7 +216,7 @@ class Budget(Base):
             if not self.is_warning_sent:
                 self.is_warning_sent = True
 
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def reset_period(self):
         """Reset budget for new period"""
@@ -226,7 +228,7 @@ class Budget(Base):
         self.current_usage_cents = 0
         self.is_exceeded = False
         self.is_warning_sent = False
-        self.last_reset_at = datetime.utcnow()
+        self.last_reset_at = utc_now()
 
         # Calculate next period
         if self.period_type == "daily":
@@ -251,20 +253,20 @@ class Budget(Base):
             self.period_start = self.period_end
             self.period_end = self.period_start.replace(year=self.period_start.year + 1)
 
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def get_period_days_remaining(self) -> int:
         """Get number of days remaining in current period"""
         if self.is_expired():
             return 0
-        return (self.period_end - datetime.utcnow()).days
+        return (self.period_end - utc_now()).days
 
     def get_daily_burn_rate(self) -> float:
         """Get average daily spend rate in current period"""
         if not self.is_in_period():
             return 0.0
 
-        days_elapsed = (datetime.utcnow() - self.period_start).days
+        days_elapsed = (utc_now() - self.period_start).days
         if days_elapsed == 0:
             days_elapsed = 1  # Avoid division by zero
 
@@ -286,7 +288,7 @@ class Budget(Base):
         warning_threshold_percentage: float = 0.8,
     ) -> "Budget":
         """Create a monthly budget"""
-        now = datetime.utcnow()
+        now = utc_now()
         # Start of current month
         period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         # Start of next month
@@ -323,7 +325,7 @@ class Budget(Base):
         api_key_id: Optional[int] = None,
     ) -> "Budget":
         """Create a daily budget"""
-        now = datetime.utcnow()
+        now = utc_now()
         period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         period_end = period_start + timedelta(days=1)
 

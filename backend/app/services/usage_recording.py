@@ -10,7 +10,7 @@ This is the source of truth for billing and must be called
 for every LLM request regardless of success/failure.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -168,7 +168,7 @@ class UsageRecordingService:
             error_message=error_message[:1000] if error_message else None,  # Truncate long errors
             ip_address=ip_address,
             user_agent=user_agent[:500] if user_agent else None,  # Truncate long user agents
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         # Add to session

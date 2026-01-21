@@ -7,7 +7,7 @@ Collects and manages metrics for LLM operations.
 import time
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from collections import defaultdict, deque
 import threading
@@ -75,7 +75,7 @@ class MetricsCollector:
     ):
         """Record a request metric"""
         metric = RequestMetric(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             provider=provider,
             model=model,
             request_type=request_type,
@@ -114,7 +114,7 @@ class MetricsCollector:
                 not force_refresh
                 and self._cached_metrics
                 and self._cache_timestamp
-                and (datetime.utcnow() - self._cache_timestamp).total_seconds()
+                and (datetime.now(timezone.utc) - self._cache_timestamp).total_seconds()
                 < self._cache_ttl_seconds
             ):
                 return self._cached_metrics
@@ -124,7 +124,7 @@ class MetricsCollector:
 
             # Cache results
             self._cached_metrics = metrics
-            self._cache_timestamp = datetime.utcnow()
+            self._cache_timestamp = datetime.now(timezone.utc)
 
             return metrics
 
@@ -159,7 +159,7 @@ class MetricsCollector:
             average_latency_ms=avg_latency,
             average_risk_score=avg_risk_score,
             provider_metrics=provider_metrics,
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
         )
 
     def _calculate_provider_metrics(self, provider_data: deque) -> Dict[str, Any]:
@@ -234,14 +234,14 @@ class MetricsCollector:
 
     def get_recent_metrics(self, minutes: int = 5) -> List[RequestMetric]:
         """Get metrics from the last N minutes"""
-        cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
 
         with self._lock:
             return [m for m in self._metrics if m.timestamp >= cutoff_time]
 
     def get_error_metrics(self, hours: int = 1) -> Dict[str, int]:
         """Get error distribution from the last N hours"""
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
         error_counts = defaultdict(int)
 
         with self._lock:
@@ -257,7 +257,7 @@ class MetricsCollector:
 
     def get_performance_metrics(self, minutes: int = 15) -> Dict[str, Dict[str, float]]:
         """Get performance metrics by provider from the last N minutes"""
-        cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
         provider_perf = defaultdict(list)
 
         with self._lock:
@@ -333,7 +333,7 @@ class MetricsCollector:
                 sorted(error_metrics.items(), key=lambda x: x[1], reverse=True)[:5]
             ),
             "provider_count": len(metrics.provider_metrics),
-            "last_updated": datetime.utcnow().isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
         }
 
 

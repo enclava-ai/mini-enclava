@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, List
 from enum import Enum
 import httpx
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.config import settings
 from app.core.logging import get_logger
 
@@ -85,7 +85,7 @@ class AlertService:
             context = {}
 
         # Add timestamp to context
-        context["timestamp"] = datetime.utcnow().isoformat()
+        context["timestamp"] = datetime.now(timezone.utc).isoformat()
         context["alert_type"] = alert_type.value
         context["severity"] = severity.value
 
@@ -385,7 +385,7 @@ class AlertService:
                             if key not in ["timestamp", "alert_type", "severity"]
                         ],
                         "footer": "Enclava Token Stats",
-                        "ts": int(datetime.utcnow().timestamp()),
+                        "ts": int(datetime.now(timezone.utc).timestamp()),
                     }
                 ]
             }

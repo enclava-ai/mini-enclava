@@ -7,7 +7,7 @@ Tests Phase 0: Provider Tool Support
 import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.services.llm.providers.privatemode import PrivateModeProvider
 from app.services.llm.models import (
@@ -73,7 +73,7 @@ async def test_create_completion_with_tools_in_request(provider):
     mock_response_data = {
         "id": "test-id",
         "object": "chat.completion",
-        "created": int(datetime.utcnow().timestamp()),
+        "created": int(datetime.now(timezone.utc).timestamp()),
         "model": "gpt-oss-120b",
         "choices": [
             {
@@ -133,7 +133,7 @@ async def test_parse_response_with_tool_calls(provider):
     mock_response_data = {
         "id": "test-id",
         "object": "chat.completion",
-        "created": int(datetime.utcnow().timestamp()),
+        "created": int(datetime.now(timezone.utc).timestamp()),
         "model": "gpt-oss-120b",
         "choices": [
             {
@@ -209,7 +209,7 @@ async def test_parse_response_no_tool_calls(provider):
     mock_response_data = {
         "id": "test-id",
         "object": "chat.completion",
-        "created": int(datetime.utcnow().timestamp()),
+        "created": int(datetime.now(timezone.utc).timestamp()),
         "model": "gpt-oss-120b",
         "choices": [
             {
@@ -285,7 +285,7 @@ async def test_tool_message_serialization(provider):
     mock_response_data = {
         "id": "test-id",
         "object": "chat.completion",
-        "created": int(datetime.utcnow().timestamp()),
+        "created": int(datetime.now(timezone.utc).timestamp()),
         "model": "gpt-oss-120b",
         "choices": [
             {
@@ -424,7 +424,7 @@ async def test_finish_reason_tool_calls(provider):
     mock_response_data = {
         "id": "test-id",
         "object": "chat.completion",
-        "created": int(datetime.utcnow().timestamp()),
+        "created": int(datetime.now(timezone.utc).timestamp()),
         "model": "gpt-oss-120b",
         "choices": [
             {

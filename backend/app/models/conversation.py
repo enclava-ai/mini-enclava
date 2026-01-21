@@ -2,7 +2,7 @@
 Conversation model for Responses API
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     Integer,
@@ -13,7 +13,7 @@ from sqlalchemy import (
     Index,
 )
 from sqlalchemy.orm import relationship
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class Conversation(Base):
@@ -40,8 +40,8 @@ class Conversation(Base):
     conversation_metadata = Column(JSON, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="conversations", foreign_keys=[user_id])
@@ -75,7 +75,7 @@ class Conversation(Base):
         if not self.items:
             self.items = []
         self.items.extend(new_items)
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def get_items_count(self) -> int:
         """Get total number of items in conversation."""

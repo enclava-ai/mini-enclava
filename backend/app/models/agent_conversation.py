@@ -18,10 +18,10 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class AgentConversation(Base):
@@ -35,8 +35,8 @@ class AgentConversation(Base):
 
     # Conversation metadata
     title = Column(String(255))  # Auto-generated or user-defined title
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     is_active = Column(Boolean, default=True)
 
     # Conversation context and settings
@@ -72,7 +72,7 @@ class AgentMessage(Base):
     tool_name = Column(String(100), nullable=True)  # Which tool was called
 
     # Metadata
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=utc_now)
     message_metadata = Column(JSON, default=dict)  # Token counts, model used, etc.
 
     # RAG sources if applicable

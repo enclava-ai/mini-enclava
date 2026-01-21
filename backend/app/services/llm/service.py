@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional, List, AsyncGenerator, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4, UUID
 from sqlalchemy import select
 
@@ -65,7 +65,7 @@ class LLMService:
             return
 
         start_time = time.time()
-        self._startup_time = datetime.utcnow()
+        self._startup_time = datetime.now(timezone.utc)
 
         try:
             # Get configuration
@@ -638,7 +638,7 @@ class LLMService:
                 status_dict[name] = ProviderStatus(
                     provider=name,
                     status="unavailable",
-                    last_check=datetime.utcnow(),
+                    last_check=datetime.now(timezone.utc),
                     error_message=str(e),
                     models_available=[],
                 )

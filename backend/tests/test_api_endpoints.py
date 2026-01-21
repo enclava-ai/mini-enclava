@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI, status
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Import the main app
 from app.main import app
@@ -235,14 +235,14 @@ class TestAPIKeyEndpoints:
                     name="Test Key 1", 
                     key_prefix="ak_test1",
                     is_active=True,
-                    created_at=datetime.utcnow()
+                    created_at=datetime.now(timezone.utc)
                 ),
                 Mock(
                     id="key2",
                     name="Test Key 2", 
                     key_prefix="ak_test2",
                     is_active=True,
-                    created_at=datetime.utcnow()
+                    created_at=datetime.now(timezone.utc)
                 )
             ]
             mock_get_keys.return_value = (mock_keys, 2)
@@ -413,7 +413,7 @@ class TestAuditEndpoints:
                     resource_type="user",
                     user_id="user_123",
                     success=True,
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                     ip_address="127.0.0.1"
                 ),
                 Mock(
@@ -422,7 +422,7 @@ class TestAuditEndpoints:
                     resource_type="api_endpoint",
                     user_id="user_456",
                     success=False,
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                     ip_address="192.168.1.1"
                 )
             ]
@@ -450,7 +450,7 @@ class TestAuditEndpoints:
                     id="log1",
                     action="login", 
                     success=True,
-                    created_at=datetime.utcnow()
+                    created_at=datetime.now(timezone.utc)
                 )
             ]
             mock_get_logs.return_value = (mock_logs, 1)

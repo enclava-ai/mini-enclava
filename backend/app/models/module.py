@@ -1,10 +1,10 @@
 """
 Module model for tracking installed modules and their configurations
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Text
-from app.db.database import Base
+from app.db.database import Base, utc_now
 from enum import Enum
 
 
@@ -100,9 +100,9 @@ class Module(Base):
     error_count_runtime = Column(Integer, default=0)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    installed_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    installed_at = Column(DateTime, default=utc_now)
 
     def __repr__(self):
         return f"<Module(id={self.id}, name='{self.name}', status='{self.status}')>"
@@ -174,7 +174,7 @@ class Module(Base):
         """Get uptime in seconds"""
         if not self.last_started:
             return 0
-        return int((datetime.utcnow() - self.last_started).total_seconds())
+        return int((utc_now() - self.last_started).total_seconds())
 
     def can_be_disabled(self) -> bool:
         """Check if module can be disabled"""
@@ -205,40 +205,40 @@ class Module(Base):
         if self.config_values is None:
             self.config_values = {}
         self.config_values.update(config_updates)
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def reset_config(self):
         """Reset configuration to default values"""
         self.config_values = self.default_config.copy() if self.default_config else {}
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def enable(self):
         """Enable the module"""
         if self.status != ModuleStatus.ERROR:
             self.is_enabled = True
             self.status = ModuleStatus.LOADING
-            self.updated_at = datetime.utcnow()
+            self.updated_at = utc_now()
 
     def disable(self):
         """Disable the module"""
         if self.can_be_disabled():
             self.is_enabled = False
             self.status = ModuleStatus.DISABLED
-            self.last_stopped = datetime.utcnow()
-            self.updated_at = datetime.utcnow()
+            self.last_stopped = utc_now()
+            self.updated_at = utc_now()
 
     def start(self):
         """Start the module"""
         self.status = ModuleStatus.ACTIVE
-        self.last_started = datetime.utcnow()
+        self.last_started = utc_now()
         self.last_error = None
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def stop(self):
         """Stop the module"""
         self.status = ModuleStatus.INACTIVE
-        self.last_stopped = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.last_stopped = utc_now()
+        self.updated_at = utc_now()
 
     def set_error(self, error_message: str):
         """Set module error status"""
@@ -246,13 +246,13 @@ class Module(Base):
         self.last_error = error_message
         self.error_count += 1
         self.error_count_runtime += 1
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def clear_error(self):
         """Clear error status"""
         self.last_error = None
         self.error_count_runtime = 0
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def record_request(self, success: bool = True):
         """Record a request to this module"""

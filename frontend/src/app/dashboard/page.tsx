@@ -193,19 +193,13 @@ function DashboardContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-empire-gold">
-            Welcome back, {user?.name || 'User'}
-          </h1>
-          <p className="text-empire-gold/60 mt-1">
-            Manage your Enclava platform and modules
-          </p>
-        </div>
-        <Button className="bg-empire-gold hover:bg-empire-gold/90 text-empire-dark">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Module
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold text-empire-gold">
+          Welcome back, {user?.name || 'User'}
+        </h1>
+        <p className="text-empire-gold/60 mt-1">
+          Manage your Enclava platform and modules
+        </p>
       </div>
 
       {/* Stats Grid */}

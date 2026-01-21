@@ -1,7 +1,7 @@
 """Authentication API endpoints"""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +16,7 @@ from app.core.logging import get_logger
 from app.core.security import (
     verify_password,
     get_password_hash,
+    password_needs_rehash,
     create_access_token,
     create_refresh_token,
     verify_token,
@@ -174,23 +175,26 @@ async def register(user_data: UserRegisterRequest, db: AsyncSession = Depends(ge
 async def login(user_data: UserLoginRequest, db: AsyncSession = Depends(get_db)):
     """Login user and return access tokens"""
 
-    # Determine identifier for logging and user lookup
+    # SECURITY FIX #41, #52: Don't log PII or timing details in production
+    # Only log minimal information needed for debugging
     identifier = user_data.email if user_data.email else user_data.username
+    # Redact email/username for logging - show only domain for email or first 2 chars for username
+    if user_data.email and "@" in identifier:
+        redacted_id = f"***@{identifier.split('@')[1]}"
+    else:
+        redacted_id = f"{identifier[:2]}***" if len(identifier) > 2 else "***"
+
     logger.info(
-        "LOGIN_DEBUG_START",
-        request_time=datetime.utcnow().isoformat(),
-        identifier=identifier,
-        database_url="SET" if settings.DATABASE_URL else "NOT SET",
-        jwt_secret="SET" if settings.JWT_SECRET else "NOT SET",
-        admin_email=settings.ADMIN_EMAIL,
-        bcrypt_rounds=settings.BCRYPT_ROUNDS,
+        "LOGIN_ATTEMPT",
+        identifier_redacted=redacted_id,
+        has_database="SET" if settings.DATABASE_URL else "NOT SET",
+        has_jwt_secret="SET" if settings.JWT_SECRET else "NOT SET",
     )
 
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
 
     # Get user by email or username
-    logger.info("LOGIN_USER_QUERY_START")
-    query_start = datetime.utcnow()
+    query_start = datetime.now(timezone.utc)
 
     if user_data.email:
         stmt = select(User).options(selectinload(User.role)).where(User.email == user_data.email)
@@ -198,12 +202,6 @@ async def login(user_data: UserLoginRequest, db: AsyncSession = Depends(get_db))
         stmt = select(User).options(selectinload(User.role)).where(User.username == user_data.username)
 
     result = await db.execute(stmt)
-    query_end = datetime.utcnow()
-    logger.info(
-        "LOGIN_USER_QUERY_END",
-        duration_seconds=(query_end - query_start).total_seconds(),
-    )
-
     user = result.scalar_one_or_none()
 
     if not user:
@@ -218,7 +216,7 @@ async def login(user_data: UserLoginRequest, db: AsyncSession = Depends(get_db))
             and settings.ADMIN_PASSWORD
         ):
             bootstrap_attempted = True
-            logger.info("LOGIN_ADMIN_BOOTSTRAP_START", email=user_data.email)
+            logger.info("LOGIN_ADMIN_BOOTSTRAP_START")
             try:
                 await create_default_admin()
                 # Re-run lookup after bootstrap attempt
@@ -226,54 +224,39 @@ async def login(user_data: UserLoginRequest, db: AsyncSession = Depends(get_db))
                 result = await db.execute(stmt)
                 user = result.scalar_one_or_none()
                 if user:
-                    logger.info("LOGIN_ADMIN_BOOTSTRAP_SUCCESS", email=user.email)
+                    logger.info("LOGIN_ADMIN_BOOTSTRAP_SUCCESS")
             except Exception as bootstrap_exc:
                 logger.error("LOGIN_ADMIN_BOOTSTRAP_FAILED", error=str(bootstrap_exc))
 
         if not user:
-            logger.warning("LOGIN_USER_NOT_FOUND", identifier=identifier)
-            # List available users for debugging
-            try:
-                all_users_stmt = select(User).limit(5)
-                all_users_result = await db.execute(all_users_stmt)
-                all_users = all_users_result.scalars().all()
-                logger.info(
-                    "LOGIN_USER_LIST",
-                    users=[u.email for u in all_users],
-                )
-            except Exception as e:
-                logger.error("LOGIN_USER_LIST_FAILURE", error=str(e))
+            # SECURITY FIX #41: Don't log identifiers or list users
+            logger.warning("LOGIN_USER_NOT_FOUND", identifier_redacted=redacted_id)
 
             if bootstrap_attempted:
-                logger.warning(
-                    "LOGIN_ADMIN_BOOTSTRAP_UNSUCCESSFUL", email=user_data.email
-                )
+                logger.warning("LOGIN_ADMIN_BOOTSTRAP_UNSUCCESSFUL")
 
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
             )
 
-    logger.info("LOGIN_USER_FOUND", email=user.email, is_active=user.is_active)
-    logger.info("LOGIN_PASSWORD_VERIFY_START")
-    verify_start = datetime.utcnow()
+    # SECURITY FIX #41, #52: Don't log emails or password verification timing
+    logger.debug("LOGIN_USER_FOUND", is_active=user.is_active)
 
     if not verify_password(user_data.password, user.hashed_password):
-        verify_end = datetime.utcnow()
-        logger.warning(
-            "LOGIN_PASSWORD_VERIFY_FAILURE",
-            duration_seconds=(verify_end - verify_start).total_seconds(),
-        )
+        logger.warning("LOGIN_PASSWORD_VERIFY_FAILURE")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
 
-    verify_end = datetime.utcnow()
-    logger.info(
-        "LOGIN_PASSWORD_VERIFY_SUCCESS",
-        duration_seconds=(verify_end - verify_start).total_seconds(),
-    )
+    logger.debug("LOGIN_PASSWORD_VERIFY_SUCCESS")
+
+    # SECURITY FIX #28: Rehash password if using old/weak cost factor
+    if password_needs_rehash(user.hashed_password):
+        logger.info("PASSWORD_REHASH_NEEDED", user_id=user.id)
+        user.hashed_password = get_password_hash(user_data.password)
+        # This will be committed with the last_login update
 
     if not user.is_active:
         raise HTTPException(
@@ -281,19 +264,10 @@ async def login(user_data: UserLoginRequest, db: AsyncSession = Depends(get_db))
         )
 
     # Update last login
-    logger.info("LOGIN_LAST_LOGIN_UPDATE_START")
-    update_start = datetime.utcnow()
     user.update_last_login()
     await db.commit()
-    update_end = datetime.utcnow()
-    logger.info(
-        "LOGIN_LAST_LOGIN_UPDATE_SUCCESS",
-        duration_seconds=(update_end - update_start).total_seconds(),
-    )
 
     # Create tokens
-    logger.info("LOGIN_TOKEN_CREATE_START")
-    token_start = datetime.utcnow()
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     access_token = create_access_token(
@@ -306,18 +280,20 @@ async def login(user_data: UserLoginRequest, db: AsyncSession = Depends(get_db))
         expires_delta=access_token_expires,
     )
 
-    refresh_token = create_refresh_token(data={"sub": str(user.id), "type": "refresh"})
-    token_end = datetime.utcnow()
-    logger.info(
-        "LOGIN_TOKEN_CREATE_SUCCESS",
-        duration_seconds=(token_end - token_start).total_seconds(),
+    # SECURITY FIX #5, #45: Create refresh token with JTI for rotation/revocation
+    refresh_token, refresh_jti = create_refresh_token(
+        data={"sub": str(user.id), "type": "refresh"}
     )
 
-    total_time = datetime.utcnow() - start_time
-    logger.info(
-        "LOGIN_DEBUG_COMPLETE",
-        total_duration_seconds=total_time.total_seconds(),
-    )
+    # Register token with token service for tracking
+    try:
+        from app.services.token_service import token_service
+        await token_service.create_refresh_token_entry(user.id, refresh_jti)
+    except Exception as e:
+        logger.warning(f"Failed to register refresh token: {e}")
+
+    # SECURITY FIX #52: Don't log timing information that could be used for attacks
+    logger.info("LOGIN_SUCCESS", user_id=user.id)
 
     # Check if user needs to change password
     response_data = {
@@ -339,17 +315,42 @@ async def login(user_data: UserLoginRequest, db: AsyncSession = Depends(get_db))
 async def refresh_token(
     token_data: RefreshTokenRequest, db: AsyncSession = Depends(get_db)
 ):
-    """Refresh access token using refresh token"""
+    """
+    Refresh access token using refresh token.
+
+    Security mitigation #5, #45: Implements token rotation - each refresh
+    generates a new refresh token and invalidates the old one.
+    """
+    from app.services.token_service import token_service
 
     try:
         payload = verify_token(token_data.refresh_token)
         user_id = payload.get("sub")
         token_type = payload.get("type")
+        old_jti = payload.get("jti")
 
         if not user_id or token_type != "refresh":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
             )
+
+        # SECURITY FIX #5, #45: Validate token against revocation list
+        if old_jti:
+            validation = await token_service.validate_refresh_token(old_jti, int(user_id))
+            if not validation.get("valid"):
+                logger.warning(
+                    f"Refresh token validation failed: {validation.get('error')}",
+                    extra={"user_id": user_id, "jti": old_jti[:8] if old_jti else None},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=validation.get("error", "Invalid refresh token"),
+                )
+            family_id = validation.get("family_id")
+        else:
+            # Legacy token without JTI - allow but warn
+            logger.warning(f"Legacy refresh token without JTI for user {user_id}")
+            family_id = None
 
         # Get user from database
         stmt = select(User).options(selectinload(User.role)).where(User.id == int(user_id))
@@ -364,13 +365,9 @@ async def refresh_token(
 
         # Create new access token
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        logger.info(
+        logger.debug(
             f"REFRESH: Creating new access token with expiration: {access_token_expires}"
         )
-        logger.info(
-            f"REFRESH: ACCESS_TOKEN_EXPIRE_MINUTES from settings: {settings.ACCESS_TOKEN_EXPIRE_MINUTES}"
-        )
-        logger.info(f"REFRESH: Current UTC time: {datetime.utcnow().isoformat()}")
 
         access_token = create_access_token(
             data={
@@ -382,9 +379,23 @@ async def refresh_token(
             expires_delta=access_token_expires,
         )
 
+        # SECURITY FIX #5: Generate new refresh token (rotation)
+        new_refresh_token, new_jti = create_refresh_token(
+            data={"sub": str(user.id), "type": "refresh"}
+        )
+
+        # Rotate tokens in the token service
+        if old_jti and family_id:
+            await token_service.rotate_refresh_token(
+                old_jti, new_jti, user.id, family_id
+            )
+        else:
+            # Create new family for legacy tokens
+            await token_service.create_refresh_token_entry(user.id, new_jti)
+
         return TokenResponse(
             access_token=access_token,
-            refresh_token=token_data.refresh_token,  # Keep same refresh token
+            refresh_token=new_refresh_token,  # Return NEW refresh token
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
 
@@ -428,10 +439,46 @@ async def get_current_user_info(
     )
 
 
+class LogoutRequest(BaseModel):
+    """Optional logout request with refresh token for server-side revocation"""
+    refresh_token: Optional[str] = None
+
+
 @router.post("/logout")
-async def logout():
-    """Logout user (client should discard tokens)"""
-    return {"message": "Successfully logged out"}
+async def logout(
+    logout_data: Optional[LogoutRequest] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Logout user and revoke refresh token.
+
+    Security mitigation #45: Proper token revocation on logout.
+
+    If refresh_token is provided, it will be revoked server-side.
+    Client should still discard all tokens locally.
+    """
+    from app.services.token_service import token_service
+
+    revoked = False
+
+    # Try to revoke the refresh token if provided
+    if logout_data and logout_data.refresh_token:
+        try:
+            payload = verify_token(logout_data.refresh_token)
+            jti = payload.get("jti")
+            if jti:
+                await token_service.revoke_token(jti)
+                revoked = True
+                logger.info(
+                    f"Logout: Revoked refresh token for user {current_user.get('id')}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to revoke token on logout: {e}")
+
+    return {
+        "message": "Successfully logged out",
+        "token_revoked": revoked,
+    }
 
 
 @router.post("/verify-token")
@@ -471,7 +518,7 @@ async def change_password(
 
     # Update password
     user.hashed_password = get_password_hash(password_data.new_password)
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from app.db.database import get_db
@@ -284,7 +284,7 @@ async def create_budget(
         )
 
     # Calculate period start and end
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     period_start, period_end = _calculate_period_bounds(now, budget_data.period_type)
 
     # Create budget
@@ -372,7 +372,7 @@ async def update_budget(
     # Recalculate period if period_type changed
     if "period_type" in update_data:
         period_start, period_end = _calculate_period_bounds(
-            datetime.utcnow(), budget.period_type
+            datetime.now(timezone.utc), budget.period_type
         )
         budget.period_start = period_start
         budget.period_end = period_end
@@ -483,7 +483,7 @@ async def get_budget_usage(
     is_exceeded = current_usage > budget.limit_amount
 
     # Calculate days remaining in period
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     days_remaining = max(0, (budget.period_end - now).days)
 
     # Calculate projected usage
@@ -675,7 +675,7 @@ async def _get_usage_history(
 ) -> List[dict]:
     """Get usage history for the budget"""
 
-    end_date = datetime.utcnow()
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=days)
 
     # Build query

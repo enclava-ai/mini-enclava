@@ -5,7 +5,7 @@ Tests ProviderPricing and PricingAuditLog model creation,
 properties, methods, and edge cases.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -33,10 +33,10 @@ class TestProviderPricingModel:
             context_length=128000,
             architecture={"type": "transformer"},
             quantization="fp16",
-            effective_from=datetime.utcnow(),
+            effective_from=datetime.now(timezone.utc),
             effective_until=None,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
 
         assert pricing.id == 1
@@ -88,7 +88,7 @@ class TestProviderPricingModel:
             input_price_per_million_cents=100,
             output_price_per_million_cents=200,
             price_source="api_sync",
-            effective_until=datetime.utcnow(),
+            effective_until=datetime.now(timezone.utc),
         )
 
         assert pricing.is_current is False
@@ -237,13 +237,13 @@ class TestProviderPricingModel:
             input_price_per_million_cents=100,
             output_price_per_million_cents=200,
             price_source="api_sync",
-            effective_from=datetime.utcnow() - timedelta(days=10),
+            effective_from=datetime.now(timezone.utc) - timedelta(days=10),
             effective_until=None,
         )
 
         assert pricing.is_current is True
 
-        before_expire = datetime.utcnow()
+        before_expire = datetime.now(timezone.utc)
         pricing.expire()
 
         assert pricing.is_current is False
@@ -306,7 +306,7 @@ class TestProviderPricingModel:
 
     def test_to_dict_method(self):
         """Test to_dict method converts model to dictionary correctly."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         pricing = ProviderPricing(
             id=42,
             provider_id="redpill",
@@ -395,7 +395,7 @@ class TestPricingAuditLogModel:
     def test_create_pricing_audit_log_all_fields(self):
         """Test PricingAuditLog creation with all fields."""
         sync_job_id = uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         audit = PricingAuditLog(
             id=1,
@@ -501,7 +501,7 @@ class TestPricingAuditLogModel:
     def test_to_dict_method(self):
         """Test to_dict method for audit log."""
         sync_job_id = uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         audit = PricingAuditLog(
             id=42,
@@ -545,7 +545,7 @@ class TestPricingAuditLogModel:
             change_source="admin_manual",
             changed_by_user_id=1,
             sync_job_id=None,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         result = audit.to_dict()

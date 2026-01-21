@@ -7,7 +7,7 @@ and maintains pricing history in the database.
 
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -132,7 +132,7 @@ class ProviderPricingSyncService:
             raise ValueError(f"Provider '{provider_id}' is not configured for API sync")
 
         sync_job_id = uuid.uuid4()
-        started_at = datetime.utcnow()
+        started_at = datetime.now(timezone.utc)
 
         result = SyncResult(
             provider_id=provider_id,
@@ -185,7 +185,7 @@ class ProviderPricingSyncService:
             result.errors.append(error_msg)
             await self.db.rollback()
 
-        result.completed_at = datetime.utcnow()
+        result.completed_at = datetime.now(timezone.utc)
 
         logger.info(
             f"Pricing sync completed for '{provider_id}': "

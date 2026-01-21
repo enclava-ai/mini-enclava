@@ -10,7 +10,7 @@ Tests cover:
 - Small token counts producing non-zero costs
 """
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.services.pricing import (
     PricingService,
@@ -220,7 +220,7 @@ class TestPricingService:
             input_price_per_million_cents=100,  # $1 per 1M
             output_price_per_million_cents=200,  # $2 per 1M
             price_source="manual",
-            effective_from=datetime.utcnow()
+            effective_from=datetime.now(timezone.utc)
         )
 
         input_cost, output_cost, total_cost = pricing_service.calculate_cost_cents(
@@ -242,7 +242,7 @@ class TestPricingService:
             input_price_per_million_cents=1,  # 1 cent per 1M
             output_price_per_million_cents=1,  # 1 cent per 1M
             price_source="manual",
-            effective_from=datetime.utcnow()
+            effective_from=datetime.now(timezone.utc)
         )
 
         # With 1 token at 1 cent per million, floor would give 0
@@ -267,7 +267,7 @@ class TestPricingService:
             input_price_per_million_cents=40,  # 40 cents per 1M
             output_price_per_million_cents=40,  # 40 cents per 1M
             price_source="manual",
-            effective_from=datetime.utcnow()
+            effective_from=datetime.now(timezone.utc)
         )
 
         # 10 tokens should still produce cost due to ceiling division
@@ -291,7 +291,7 @@ class TestPricingService:
             input_price_per_million_cents=100,
             output_price_per_million_cents=200,
             price_source="manual",
-            effective_from=datetime.utcnow()
+            effective_from=datetime.now(timezone.utc)
         )
 
         input_cost, output_cost, total_cost = pricing_service.calculate_cost_cents(
@@ -315,7 +315,7 @@ class TestPricingService:
             input_price_per_million_cents=300,  # Claude pricing
             output_price_per_million_cents=1500,
             price_source="manual",
-            effective_from=datetime.utcnow()
+            effective_from=datetime.now(timezone.utc)
         )
 
         # 10M tokens should be straightforward
@@ -340,7 +340,7 @@ class TestPricingService:
             input_price_per_million_cents=2,
             output_price_per_million_cents=0,  # Embeddings have no output
             price_source="manual",
-            effective_from=datetime.utcnow()
+            effective_from=datetime.now(timezone.utc)
         )
 
         input_cost, output_cost, total_cost = pricing_service.calculate_cost_cents(
@@ -420,7 +420,7 @@ class TestModelPricingDataclass:
     @pytest.mark.unit
     def test_model_pricing_creation(self):
         """Test creating a ModelPricing instance."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         pricing = ModelPricing(
             provider_id="test",
             model_id="test-model",
@@ -450,7 +450,7 @@ class TestModelPricingDataclass:
                 input_price_per_million_cents=100,
                 output_price_per_million_cents=200,
                 price_source=source,
-                effective_from=datetime.utcnow()
+                effective_from=datetime.now(timezone.utc)
             )
             assert pricing.price_source == source
 

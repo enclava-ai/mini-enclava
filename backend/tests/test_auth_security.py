@@ -6,7 +6,7 @@ import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import jwt
 
 from app.core.security import (
@@ -207,7 +207,7 @@ class TestAPIKeySecurity:
             "key_hash": get_password_hash("test_api_key"),
             "is_active": True,
             "permissions": ["llm:chat"],
-            "expires_at": datetime.utcnow() - timedelta(days=1)  # Expired
+            "expires_at": datetime.now(timezone.utc) - timedelta(days=1)  # Expired
         }
         
         with patch('app.services.api_key_auth.get_api_key_from_db', return_value=expired_api_key_data):

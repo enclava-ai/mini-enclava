@@ -3,7 +3,7 @@ Plugin Configuration Service
 Handles persistent storage and caching of plugin configurations
 """
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, and_
 from sqlalchemy.orm import selectinload
@@ -130,14 +130,14 @@ class PluginConfigurationService:
                     config.config_data = {}
 
                 config.config_data[config_key] = config_value
-                config.updated_at = datetime.utcnow()
+                config.updated_at = datetime.now(timezone.utc)
 
                 # Use update to ensure proper JSON serialization
                 stmt = (
                     update(PluginConfiguration)
                     .where(PluginConfiguration.id == config.id)
                     .values(
-                        config_data=config.config_data, updated_at=datetime.utcnow()
+                        config_data=config.config_data, updated_at=datetime.now(timezone.utc)
                     )
                 )
                 await self.db.execute(stmt)
@@ -221,13 +221,13 @@ class PluginConfigurationService:
                     config.config_data = {}
 
                 config.config_data.update(config_data)
-                config.updated_at = datetime.utcnow()
+                config.updated_at = datetime.now(timezone.utc)
 
                 stmt = (
                     update(PluginConfiguration)
                     .where(PluginConfiguration.id == config.id)
                     .values(
-                        config_data=config.config_data, updated_at=datetime.utcnow()
+                        config_data=config.config_data, updated_at=datetime.now(timezone.utc)
                     )
                 )
                 await self.db.execute(stmt)
@@ -282,13 +282,13 @@ class PluginConfigurationService:
             if config and config.config_data and config_key in config.config_data:
                 # Remove the key from config_data
                 del config.config_data[config_key]
-                config.updated_at = datetime.utcnow()
+                config.updated_at = datetime.now(timezone.utc)
 
                 stmt = (
                     update(PluginConfiguration)
                     .where(PluginConfiguration.id == config.id)
                     .values(
-                        config_data=config.config_data, updated_at=datetime.utcnow()
+                        config_data=config.config_data, updated_at=datetime.now(timezone.utc)
                     )
                 )
                 await self.db.execute(stmt)
@@ -408,9 +408,9 @@ class PluginConfigurationService:
                 "active_configurations": active_configs,
                 "cache_size": len(self._memory_cache),
                 "redis_available": self._redis_available,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
             logger.error(f"Failed to get configuration stats: {e}")
-            return {"error": str(e), "timestamp": datetime.utcnow().isoformat()}
+            return {"error": str(e), "timestamp": datetime.now(timezone.utc).isoformat()}

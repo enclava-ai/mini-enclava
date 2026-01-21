@@ -5,7 +5,7 @@ This is the source of truth for all LLM usage and billing data.
 Every LLM request (success or failure) creates a record here.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID
 
@@ -24,7 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, INET
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from app.db.database import Base, utc_now
 
 
 class UsageRecord(Base):
@@ -113,7 +113,7 @@ class UsageRecord(Base):
     user_agent = Column(Text, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now, index=True)
 
     # Table-level constraints and indexes
     __table_args__ = (

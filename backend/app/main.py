@@ -295,7 +295,9 @@ setup_analytics_middleware(app)
 
 # Security middleware disabled - handled externally
 
-# Rate limiting middleware disabled - handled externally
+# SECURITY FIX #2, #46, #49: Enable rate limiting middleware
+from app.middleware.rate_limiting import setup_rate_limiting
+setup_rate_limiting(app)
 
 
 # Exception handlers
@@ -324,16 +326,22 @@ async def http_exception_handler(request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
+    """
+    Handle validation errors without echoing user input.
+
+    Security mitigation #51: Don't echo user input in error responses to prevent
+    XSS, log injection, and information disclosure.
+    """
     # Convert validation errors to JSON-serializable format
     errors = []
     for error in exc.errors():
+        # SECURITY FIX #51: Remove user input from error response
+        # The input could contain malicious content (XSS payloads, etc.)
         error_dict = {
             "type": error.get("type", ""),
             "location": error.get("loc", []),
             "message": error.get("msg", ""),
-            "input": str(error.get("input", ""))
-            if error.get("input") is not None
-            else None,
+            # "input" field intentionally omitted for security
         }
         errors.append(error_dict)
 

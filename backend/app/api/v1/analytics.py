@@ -143,11 +143,11 @@ async def get_usage_trends(
 ):
     """Get usage trends over time"""
     try:
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         from sqlalchemy import func
         from app.models.usage_tracking import UsageTracking
 
-        cutoff_time = datetime.utcnow() - timedelta(days=days)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
 
         # Daily usage trends
         daily_usage = (

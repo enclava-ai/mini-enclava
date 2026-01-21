@@ -6,7 +6,7 @@ Provides pre-configured AI agents with custom tool sets and prompts.
 
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Union
 from uuid import uuid4
 from pydantic import BaseModel, Field
@@ -334,8 +334,8 @@ class AgentModule(BaseModule):
             agent_config_id=agent_config_id,
             user_id=str(user_id),
             title="Agent Chat",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
         db.add(new_conv)
         await db.commit()
@@ -357,7 +357,7 @@ class AgentModule(BaseModule):
             role=role,
             content=content,
             tool_calls=tool_calls,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         db.add(msg)
         await db.commit()
@@ -398,8 +398,8 @@ class AgentModule(BaseModule):
             is_public=request.is_public,
             is_template=False,
             created_by_user_id=user_id,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
 
         db.add(agent)
@@ -476,7 +476,7 @@ class AgentModule(BaseModule):
         for key, value in update_data.items():
             setattr(config, key, value)
 
-        config.updated_at = datetime.utcnow()
+        config.updated_at = datetime.now(timezone.utc)
 
         await db.commit()
         await db.refresh(config)
@@ -661,7 +661,7 @@ class AgentModule(BaseModule):
 
         # Update agent usage
         agent.usage_count += 1
-        agent.last_used_at = datetime.utcnow()
+        agent.last_used_at = datetime.now(timezone.utc)
         await db.commit()
 
         # Return OpenAI-compatible response
@@ -883,7 +883,7 @@ class AgentModule(BaseModule):
 
         # Update agent usage
         agent.usage_count += 1
-        agent.last_used_at = datetime.utcnow()
+        agent.last_used_at = datetime.now(timezone.utc)
 
         # Get token counts
         prompt_tokens = response.usage.prompt_tokens if response.usage else 0
@@ -1205,7 +1205,7 @@ class AgentModule(BaseModule):
 
             # Update agent usage
             agent.usage_count += 1
-            agent.last_used_at = datetime.utcnow()
+            agent.last_used_at = datetime.now(timezone.utc)
 
             # Get token counts
             prompt_tokens = response.usage.prompt_tokens if response.usage else 0

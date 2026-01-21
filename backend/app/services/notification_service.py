@@ -9,7 +9,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jinja2 import Template, Environment, DictLoader
 import aiohttp
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -96,7 +96,7 @@ class NotificationService:
         await self.db.refresh(notification)
 
         # Send immediately if not scheduled
-        if scheduled_at is None or scheduled_at <= datetime.utcnow():
+        if scheduled_at is None or scheduled_at <= datetime.now(timezone.utc):
             await self._deliver_notification(notification)
 
         return notification
@@ -167,7 +167,7 @@ class NotificationService:
     async def process_scheduled_notifications(self):
         """Process notifications that are scheduled for delivery"""
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Get pending scheduled notifications that are due
         stmt = select(Notification).where(
@@ -206,7 +206,7 @@ class NotificationService:
                 Notification.attempts < Notification.max_attempts,
                 or_(
                     Notification.expires_at.is_(None),
-                    Notification.expires_at > datetime.utcnow(),
+                    Notification.expires_at > datetime.now(timezone.utc),
                 ),
             )
         )
@@ -221,7 +221,7 @@ class NotificationService:
                 retry_delay = timedelta(
                     minutes=notification.channel.retry_delay_minutes
                 )
-                if datetime.utcnow() - notification.failed_at < retry_delay:
+                if datetime.now(timezone.utc) - notification.failed_at < retry_delay:
                     continue
 
             try:
@@ -542,7 +542,7 @@ class NotificationService:
         status_stats = dict(status_counts.all())
 
         # Recent notifications (last 24h)
-        twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
+        twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
         recent_notifications = await self.db.execute(
             select(func.count(Notification.id)).where(
                 Notification.created_at >= twenty_four_hours_ago

@@ -15,7 +15,7 @@ Tests comprehensive RAG API functionality:
 import pytest
 import json
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from httpx import AsyncClient
 from fastapi import status, UploadFile
@@ -59,7 +59,7 @@ class TestRAGEndpoints:
             description="Test collection for RAG",
             qdrant_collection_name="test_collection_qdrant",
             is_active=True,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             user_id=1
         )
     
@@ -78,7 +78,7 @@ class TestRAGEndpoints:
             character_count=1500,
             vector_count=5,
             metadata={"author": "Test Author"},
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
     
     @pytest.fixture

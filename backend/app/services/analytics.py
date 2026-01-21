@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, asdict
 from collections import defaultdict, deque
 
@@ -187,11 +187,11 @@ class AnalyticsService:
         # Check cache
         if cache_key in self.metrics_cache:
             cached_time, cached_data = self.metrics_cache[cache_key]
-            if datetime.utcnow() - cached_time < timedelta(seconds=self.cache_ttl):
+            if datetime.now(timezone.utc) - cached_time < timedelta(seconds=self.cache_ttl):
                 return cached_data
 
         try:
-            cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
             # Build query filters
             filters = [UsageTracking.created_at >= cutoff_time]
@@ -324,11 +324,11 @@ class AnalyticsService:
                 top_endpoints=top_endpoints,
                 status_codes=dict(status_counts),
                 top_models=top_models,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
             # Cache the result
-            self.metrics_cache[cache_key] = (datetime.utcnow(), metrics)
+            self.metrics_cache[cache_key] = (datetime.now(timezone.utc), metrics)
             return metrics
 
         except Exception as e:
@@ -351,7 +351,7 @@ class AnalyticsService:
                 top_endpoints=[],
                 status_codes={},
                 top_models=[],
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
     async def get_system_health(self) -> SystemHealth:
@@ -436,7 +436,7 @@ class AnalyticsService:
                 budget_usage_percentage=metrics.budget_usage_percentage,
                 budgets_near_limit=budgets_near_limit,
                 budgets_exceeded=budgets_exceeded,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
         except Exception as e:
@@ -452,7 +452,7 @@ class AnalyticsService:
                 budget_usage_percentage=0,
                 budgets_near_limit=0,
                 budgets_exceeded=0,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
     async def get_cost_analysis(
@@ -460,7 +460,7 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get detailed cost analysis and trends"""
         try:
-            cutoff_time = datetime.utcnow() - timedelta(days=days)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
 
             # Build query filters
             filters = [UsageTracking.created_at >= cutoff_time]
@@ -521,7 +521,7 @@ class AnalyticsService:
                 "requests_by_model": dict(requests_by_model),
                 "daily_costs": dict(daily_costs),
                 "cost_by_endpoint": dict(cost_by_endpoint),
-                "analysis_timestamp": datetime.utcnow().isoformat(),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -532,14 +532,14 @@ class AnalyticsService:
         """Cleanup old events from memory"""
         while self.enabled:
             try:
-                cutoff_time = datetime.utcnow() - timedelta(hours=24)
+                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
                 # Remove old events
                 while self.events and self.events[0].timestamp < cutoff_time:
                     self.events.popleft()
 
                 # Clear old cache entries
-                current_time = datetime.utcnow()
+                current_time = datetime.now(timezone.utc)
                 expired_keys = []
                 for key, (cached_time, _) in self.metrics_cache.items():
                     if current_time - cached_time > timedelta(seconds=self.cache_ttl):
@@ -665,11 +665,11 @@ class InMemoryAnalyticsService:
         # Check cache
         if cache_key in self.metrics_cache:
             cached_time, cached_data = self.metrics_cache[cache_key]
-            if datetime.utcnow() - cached_time < timedelta(seconds=self.cache_ttl):
+            if datetime.now(timezone.utc) - cached_time < timedelta(seconds=self.cache_ttl):
                 return cached_data
 
         try:
-            cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
             # Get recent events from memory
             recent_events = [e for e in self.events if e.timestamp >= cutoff_time]
@@ -771,11 +771,11 @@ class InMemoryAnalyticsService:
                 top_endpoints=top_endpoints,
                 status_codes=dict(status_counts),
                 top_models=top_models,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
             # Cache the result
-            self.metrics_cache[cache_key] = (datetime.utcnow(), metrics)
+            self.metrics_cache[cache_key] = (datetime.now(timezone.utc), metrics)
             return metrics
 
         except Exception as e:
@@ -798,7 +798,7 @@ class InMemoryAnalyticsService:
                 top_endpoints=[],
                 status_codes={},
                 top_models=[],
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
     async def get_system_health(self) -> SystemHealth:
@@ -867,7 +867,7 @@ class InMemoryAnalyticsService:
                 budget_usage_percentage=metrics.budget_usage_percentage,
                 budgets_near_limit=0,  # Mock values since no DB access
                 budgets_exceeded=0,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
         except Exception as e:
@@ -883,7 +883,7 @@ class InMemoryAnalyticsService:
                 budget_usage_percentage=0,
                 budgets_near_limit=0,
                 budgets_exceeded=0,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
     async def get_cost_analysis(
@@ -891,7 +891,7 @@ class InMemoryAnalyticsService:
     ) -> Dict[str, Any]:
         """Get detailed cost analysis and trends"""
         try:
-            cutoff_time = datetime.utcnow() - timedelta(days=days)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
 
             # Get events from memory
             events = [e for e in self.events if e.timestamp >= cutoff_time]
@@ -950,7 +950,7 @@ class InMemoryAnalyticsService:
                 "requests_by_model": dict(requests_by_model),
                 "daily_costs": dict(daily_costs),
                 "cost_by_endpoint": dict(cost_by_endpoint),
-                "analysis_timestamp": datetime.utcnow().isoformat(),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -961,14 +961,14 @@ class InMemoryAnalyticsService:
         """Cleanup old events from memory"""
         while self.enabled:
             try:
-                cutoff_time = datetime.utcnow() - timedelta(hours=24)
+                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
                 # Remove old events
                 while self.events and self.events[0].timestamp < cutoff_time:
                     self.events.popleft()
 
                 # Clear old cache entries
-                current_time = datetime.utcnow()
+                current_time = datetime.now(timezone.utc)
                 expired_keys = []
                 for key, (cached_time, _) in self.metrics_cache.items():
                     if current_time - cached_time > timedelta(seconds=self.cache_ttl):

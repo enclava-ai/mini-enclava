@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import and_, or_, desc, func
 from fastapi import HTTPException, status
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.models.tool import Tool, ToolExecution, ToolCategory, ToolType, ToolStatus
 from app.models.user import User
@@ -277,7 +277,7 @@ class ToolManagementService:
         if is_active is not None:
             tool.is_active = is_active
 
-        tool.updated_at = datetime.utcnow()
+        tool.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(tool)
@@ -354,7 +354,7 @@ class ToolManagementService:
             )
 
         tool.is_approved = True
-        tool.updated_at = datetime.utcnow()
+        tool.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(tool)
@@ -440,7 +440,7 @@ class ToolManagementService:
         stats["executions_by_status"] = dict(executions_by_status.all())
 
         # Recent executions (last 24h)
-        twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
+        twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
         recent_executions = await self.db.execute(
             select(func.count(ToolExecution.id)).where(
                 ToolExecution.created_at >= twenty_four_hours_ago
