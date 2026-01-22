@@ -1,0 +1,36 @@
+name: extract
+version: 1.0.0
+description: "Invoice and document extraction using vision models"
+author: "Enclava Team"
+category: "ai"
+
+enabled: true
+auto_start: true
+dependencies: []
+optional_dependencies: []
+
+provides:
+  - "document_extraction"
+  - "invoice_processing"
+
+consumes:
+  - "llm_vision"
+
+endpoints:
+  - path: "/extract/process"
+    method: "POST"
+    description: "Process document and extract data"
+  - path: "/extract/jobs"
+    method: "GET"
+    description: "List Extract jobs"
+  - path: "/extract/templates"
+    method: "GET"
+    description: "List extraction templates"
+
+permissions:
+  - name: "extract.process"
+    description: "Process documents with Extract"
+  - name: "extract.jobs"
+    description: "View Extract jobs"
+  - name: "extract.templates"
+    description: "Manage Extract templates"

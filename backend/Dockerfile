@@ -36,6 +36,7 @@ RUN set -eux; \
             postgresql-client \
             curl \
             ffmpeg \
+            poppler-utils \
     ; \
     rm -rf "$apt_lists" "$apt_cache"
 

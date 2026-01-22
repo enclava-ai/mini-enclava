@@ -44,6 +44,9 @@ from .billing_audit_log import (
     ActionType as BillingActionType,
     ActorType as BillingActorType,
 )
+from .extract_template import ExtractTemplate
+from .extract_job import ExtractJob
+from .extract_result import ExtractResult
 
 __all__ = [
     "User",
@@ -87,4 +90,7 @@ __all__ = [
     "BillingEntityType",
     "BillingActionType",
     "BillingActorType",
+    "ExtractTemplate",
+    "ExtractJob",
+    "ExtractResult",
 ]

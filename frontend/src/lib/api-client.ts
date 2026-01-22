@@ -246,3 +246,157 @@ export const mcpServerApi = {
     return apiClient.post(`/api/v1/mcp-servers/${id}/refresh-tools`)
   }
 }
+
+export const extractApi = {
+  /**
+   * List all extraction templates
+   */
+  listTemplates() {
+    return apiClient.get('/api/v1/extract/templates')
+  },
+
+  /**
+   * Get a specific template by ID
+   */
+  getTemplate(templateId: string) {
+    return apiClient.get(`/api/v1/extract/templates/${encodeURIComponent(templateId)}`)
+  },
+
+  /**
+   * Create a new extraction template
+   */
+  createTemplate(template: {
+    id: string
+    description?: string
+    system_prompt: string
+    user_prompt: string
+    output_schema?: any
+  }) {
+    return apiClient.post('/api/v1/extract/templates', template)
+  },
+
+  /**
+   * Update an existing template
+   */
+  updateTemplate(templateId: string, updates: {
+    description?: string
+    system_prompt?: string
+    user_prompt?: string
+    output_schema?: any
+  }) {
+    return apiClient.put(`/api/v1/extract/templates/${encodeURIComponent(templateId)}`, updates)
+  },
+
+  /**
+   * Delete a template
+   */
+  deleteTemplate(templateId: string) {
+    return apiClient.delete(`/api/v1/extract/templates/${encodeURIComponent(templateId)}`)
+  },
+
+  /**
+   * Reset default templates to their original state
+   */
+  resetDefaults() {
+    return apiClient.post('/api/v1/extract/templates/reset-defaults')
+  },
+
+  /**
+   * Template wizard - analyze a document and generate a template
+   */
+  async analyzeDocumentForTemplate(file: File, model?: string) {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (model) {
+      formData.append('model', model)
+    }
+
+    const headers = await getAuthHeader()
+    const res = await fetch('/api/v1/extract/templates/wizard', {
+      method: 'POST',
+      headers,
+      body: formData,
+    })
+
+    if (!res.ok) {
+      const rawBody = await res.text().catch(() => '')
+      let details: any = undefined
+      try { details = rawBody ? JSON.parse(rawBody) : undefined } catch { details = rawBody }
+      throw makeError('Template wizard failed', 'UNKNOWN', res.status, details)
+    }
+
+    return res.json()
+  },
+
+  /**
+   * Get available models from the LLM service (internal API with JWT auth)
+   */
+  async getModels() {
+    const headers = await getAuthHeader()
+    const res = await fetch('/api-internal/v1/llm/models', {
+      method: 'GET',
+      headers,
+    })
+
+    if (!res.ok) {
+      const rawBody = await res.text().catch(() => '')
+      let details: any = undefined
+      try { details = rawBody ? JSON.parse(rawBody) : undefined } catch { details = rawBody }
+      throw makeError('Failed to fetch models', 'UNKNOWN', res.status, details)
+    }
+
+    return res.json()
+  },
+
+  /**
+   * Process a document with Extract
+   */
+  async processDocument(file: File, template?: string, context?: Record<string, any>) {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (template) formData.append('template', template)
+    if (context) formData.append('context', JSON.stringify(context))
+
+    const headers = await getAuthHeader()
+    const res = await fetch('/api/v1/extract/process', {
+      method: 'POST',
+      headers,
+      body: formData,
+    })
+
+    if (!res.ok) {
+      const rawBody = await res.text().catch(() => '')
+      let details: any = undefined
+      try { details = rawBody ? JSON.parse(rawBody) : undefined } catch { details = rawBody }
+      throw makeError('Processing failed', 'UNKNOWN', res.status, details)
+    }
+
+    return res.json()
+  },
+
+  /**
+   * List Extract jobs for the current user
+   */
+  listJobs(params?: { limit?: number; offset?: number; status?: string }) {
+    const queryParams = new URLSearchParams()
+    if (params?.limit) queryParams.append('limit', String(params.limit))
+    if (params?.offset) queryParams.append('offset', String(params.offset))
+    if (params?.status) queryParams.append('status', params.status)
+    const query = queryParams.toString()
+    return apiClient.get(`/api/v1/extract/jobs${query ? `?${query}` : ''}`)
+  },
+
+  /**
+   * Get job details and extraction result
+   */
+  getJob(jobId: string) {
+    return apiClient.get(`/api/v1/extract/jobs/${jobId}`)
+  },
+
+  /**
+   * Health check for Extract module
+   */
+  health() {
+    return apiClient.get('/api/v1/extract/health')
+  }
+}

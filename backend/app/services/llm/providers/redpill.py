@@ -298,6 +298,8 @@ class RedPillProvider(BaseLLMProvider):
                 payload["presence_penalty"] = request.presence_penalty
             if request.stop is not None:
                 payload["stop"] = request.stop
+            if request.response_format is not None:
+                payload["response_format"] = request.response_format
 
             # Add tools and tool_choice for function calling
             if request.tools:
@@ -493,6 +495,8 @@ class RedPillProvider(BaseLLMProvider):
                 payload["presence_penalty"] = request.presence_penalty
             if request.stop is not None:
                 payload["stop"] = request.stop
+            if request.response_format is not None:
+                payload["response_format"] = request.response_format
 
             # Add tools and tool_choice for function calling
             if request.tools:

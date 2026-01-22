@@ -21,7 +21,9 @@ class ChatMessage(BaseModel):
     """Individual chat message"""
 
     role: str = Field(..., description="Message role (system, user, assistant)")
-    content: Optional[str] = Field(None, description="Message content")
+    content: Optional[Union[str, List[Dict[str, Any]]]] = Field(
+        None, description="Message content (string or vision model content parts)"
+    )
     name: Optional[str] = Field(None, description="Optional message name")
     tool_calls: Optional[List[ToolCall]] = Field(
         None, description="Tool calls in this message"
@@ -61,6 +63,9 @@ class ChatRequest(BaseModel):
     )
     stop: Optional[Union[str, List[str]]] = Field(None, description="Stop sequences")
     stream: Optional[bool] = Field(False, description="Stream response")
+    response_format: Optional[Dict[str, Any]] = Field(
+        None, description="Response format specification (e.g., {\"type\": \"json_object\"})"
+    )
     tools: Optional[List[Dict[str, Any]]] = Field(
         None, description="Available tools for function calling"
     )

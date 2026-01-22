@@ -17,8 +17,8 @@ import asyncio
 import time
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from app.services.llm.service import LLMService
-from app.services.llm.models import ChatCompletionRequest, ChatMessage, ChatCompletionResponse
-from app.core.config import get_settings
+from app.services.llm.models import ChatRequest, ChatMessage, ChatResponse
+from app.core.config import settings
 
 
 class TestLLMService:
@@ -32,13 +32,14 @@ class TestLLMService:
     @pytest.fixture
     def sample_chat_request(self):
         """Sample chat completion request"""
-        return ChatCompletionRequest(
+        return ChatRequest(
             messages=[
                 ChatMessage(role="user", content="Hello, how are you?")
             ],
             model="gpt-3.5-turbo",
             temperature=0.7,
-            max_tokens=150
+            max_tokens=150,
+            user_id="test-user"
         )
     
     @pytest.fixture
@@ -77,15 +78,15 @@ class TestLLMService:
     @pytest.mark.asyncio 
     async def test_model_selection_default(self, llm_service):
         """Test default model selection when none specified"""
-        request = ChatCompletionRequest(
-            messages=[ChatMessage(role="user", content="Test")]
-            # No model specified
+        request = ChatRequest(
+            messages=[ChatMessage(role="user", content="Test")],
+            model="gpt-3.5-turbo",  # Model is required
+            user_id="test-user"
         )
         
         selected_model = llm_service._select_model(request)
-        
+
         # Should use default model from config
-        settings = get_settings()
         assert selected_model == settings.DEFAULT_MODEL or selected_model is not None
     
     @pytest.mark.asyncio
@@ -107,14 +108,15 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_multiple_messages_handling(self, llm_service, mock_provider_response):
         """Test handling of conversation with multiple messages"""
-        multi_message_request = ChatCompletionRequest(
+        multi_message_request = ChatRequest(
             messages=[
                 ChatMessage(role="system", content="You are a helpful assistant."),
                 ChatMessage(role="user", content="What is 2+2?"),
                 ChatMessage(role="assistant", content="2+2 equals 4."),
                 ChatMessage(role="user", content="What about 3+3?")
             ],
-            model="gpt-3.5-turbo"
+            model="gpt-3.5-turbo",
+            user_id="test-user"
         )
         
         with patch.object(llm_service, '_call_provider', new_callable=AsyncMock) as mock_call:
@@ -132,9 +134,10 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_invalid_model_handling(self, llm_service):
         """Test handling of invalid/unknown model names"""
-        request = ChatCompletionRequest(
+        request = ChatRequest(
             messages=[ChatMessage(role="user", content="Test")],
-            model="nonexistent-model-xyz"
+            model="nonexistent-model-xyz",
+            user_id="test-user"
         )
         
         # Should either fallback gracefully or raise appropriate error
@@ -171,24 +174,26 @@ class TestLLMService:
         """Test validation of malformed requests"""
         # Empty messages
         with pytest.raises((ValueError, Exception)):
-            request = ChatCompletionRequest(messages=[], model="gpt-3.5-turbo")
+            request = ChatRequest(messages=[], model="gpt-3.5-turbo", user_id="test-user")
             await llm_service.chat_completion(request)
         
         # Invalid temperature
         with pytest.raises((ValueError, Exception)):
-            request = ChatCompletionRequest(
+            request = ChatRequest(
                 messages=[ChatMessage(role="user", content="Test")],
                 model="gpt-3.5-turbo",
-                temperature=2.5  # Should be 0-2
+                temperature=2.5,  # Should be 0-2
+                user_id="test-user"
             )
             await llm_service.chat_completion(request)
 
     @pytest.mark.asyncio
     async def test_invalid_message_role_handling(self, llm_service):
         """Test handling of invalid message roles"""
-        request = ChatCompletionRequest(
+        request = ChatRequest(
             messages=[ChatMessage(role="invalid_role", content="Test")],
-            model="gpt-3.5-turbo"
+            model="gpt-3.5-turbo",
+            user_id="test-user"
         )
         
         with pytest.raises((ValueError, Exception)):
@@ -199,9 +204,10 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_content_filtering_input(self, llm_service):
         """Test input content filtering for harmful content"""
-        malicious_request = ChatCompletionRequest(
+        malicious_request = ChatRequest(
             messages=[ChatMessage(role="user", content="How to make a bomb")],
-            model="gpt-3.5-turbo"
+            model="gpt-3.5-turbo",
+            user_id="test-user"
         )
         
         # Mock security service
@@ -240,9 +246,10 @@ class TestLLMService:
         """Test validation of message length limits"""
         # Create extremely long message
         long_content = "A" * 100000  # 100k characters
-        long_request = ChatCompletionRequest(
+        long_request = ChatRequest(
             messages=[ChatMessage(role="user", content=long_content)],
-            model="gpt-3.5-turbo"
+            model="gpt-3.5-turbo",
+            user_id="test-user"
         )
         
         # Should either truncate or reject
@@ -254,9 +261,10 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_token_counting_accuracy(self, llm_service, mock_provider_response):
         """Test accurate token counting for billing"""
-        request = ChatCompletionRequest(
+        request = ChatRequest(
             messages=[ChatMessage(role="user", content="Short message")],
-            model="gpt-3.5-turbo"
+            model="gpt-3.5-turbo",
+            user_id="test-user"
         )
         
         with patch.object(llm_service, '_call_provider', new_callable=AsyncMock) as mock_call:
@@ -321,10 +329,11 @@ class TestLLMService:
     def test_model_capability_validation(self, llm_service):
         """Test validation of model capabilities against request"""
         # Test streaming capability check
-        streaming_request = ChatCompletionRequest(
+        streaming_request = ChatRequest(
             messages=[ChatMessage(role="user", content="Test")],
             model="gpt-3.5-turbo",
-            stream=True
+            stream=True,
+            user_id="test-user"
         )
         
         # Should validate that selected model supports streaming
@@ -335,13 +344,14 @@ class TestLLMService:
     async def test_model_specific_parameter_handling(self, llm_service):
         """Test handling of model-specific parameters"""
         # Test parameters that may not be supported by all models
-        special_request = ChatCompletionRequest(
+        special_request = ChatRequest(
             messages=[ChatMessage(role="user", content="Test")],
             model="gpt-3.5-turbo",
             temperature=0.0,
             top_p=0.9,
             frequency_penalty=0.5,
-            presence_penalty=0.3
+            presence_penalty=0.3,
+            user_id="test-user"
         )
         
         # Should handle model-specific parameters appropriately
@@ -371,9 +381,10 @@ class TestLLMService:
         """Test handling of very large requests approaching token limits"""
         # Create request with very long message
         large_content = "This is a test. " * 1000  # Repeat to make it large
-        large_request = ChatCompletionRequest(
+        large_request = ChatRequest(
             messages=[ChatMessage(role="user", content=large_content)],
-            model="gpt-3.5-turbo"
+            model="gpt-3.5-turbo",
+            user_id="test-user"
         )
         
         # Should either handle gracefully or provide clear error
@@ -465,10 +476,11 @@ class TestLLMServiceIntegration:
     @pytest.mark.asyncio
     async def test_rag_integration(self, llm_service):
         """Test LLM service integration with RAG context"""
-        rag_enhanced_request = ChatCompletionRequest(
+        rag_enhanced_request = ChatRequest(
             messages=[ChatMessage(role="user", content="What is machine learning?")],
             model="gpt-3.5-turbo",
-            context={"rag_collection": "ml_docs", "top_k": 5}
+            context={"rag_collection": "ml_docs", "top_k": 5},
+            user_id="test-user"
         )
         
         with patch.object(llm_service, 'rag_service', create=True) as mock_rag:

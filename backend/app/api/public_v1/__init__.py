@@ -12,6 +12,7 @@ from ..v1.endpoints.mcp_servers import router as mcp_servers_router
 from ..v1.endpoints.responses import router as responses_router
 from ..v1.endpoints.conversations import router as conversations_router
 from ..v1.endpoints.prompts import router as prompts_router
+from ..v1.extract import router as extract_router
 
 # Create public API router
 public_api_router = APIRouter()
@@ -53,4 +54,9 @@ public_api_router.include_router(
 # Include Prompts API (agent config management as prompts)
 public_api_router.include_router(
     prompts_router, tags=["prompts"]
+)
+
+# Include Extract API (document extraction with vision models)
+public_api_router.include_router(
+    extract_router, prefix="/extract", tags=["extract"]
 )

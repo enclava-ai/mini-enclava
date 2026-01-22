@@ -20,6 +20,7 @@ from .plugin_registry import router as plugin_registry_router
 from .endpoints.tools import router as tools_router
 from .endpoints.tool_calling import router as tool_calling_router
 from .endpoints.user_management import router as user_management_router
+from .extract import router as extract_router
 
 # Create main API router
 api_router = APIRouter()
@@ -59,6 +60,9 @@ api_router.include_router(rag_router, prefix="/rag", tags=["rag"])
 
 # Include chatbot routes
 api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
+
+# Include extract routes
+api_router.include_router(extract_router, prefix="/extract", tags=["extract"])
 
 # Include prompt template routes
 api_router.include_router(

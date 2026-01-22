@@ -10,12 +10,11 @@ Focus: Input validation, data serialization, model compliance
 import pytest
 from pydantic import ValidationError
 from app.services.llm.models import (
-    ChatMessage, 
-    ChatCompletionRequest, 
-    ChatCompletionResponse,
-    Usage,
-    Choice,
-    ResponseMessage
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
+    TokenUsage,
+    ChatChoice
 )
 
 
@@ -79,14 +78,15 @@ class TestChatMessage:
         assert recreated.content == msg.content
 
 
-class TestChatCompletionRequest:
-    """Test ChatCompletionRequest model validation"""
+class TestChatRequest:
+    """Test ChatRequest model validation"""
     
     def test_minimal_valid_request(self):
         """Test creating minimal valid request"""
-        request = ChatCompletionRequest(
+        request = ChatRequest(
             messages=[ChatMessage(role="user", content="Test")],
-            model="gpt-3.5-turbo"
+            model="gpt-3.5-turbo",
+            user_id="test-user"
         )
         
         assert len(request.messages) == 1
@@ -95,7 +95,7 @@ class TestChatCompletionRequest:
     
     def test_full_parameter_request(self):
         """Test request with all parameters"""
-        request = ChatCompletionRequest(
+        request = ChatRequest(
             messages=[
                 ChatMessage(role="system", content="You are helpful"),
                 ChatMessage(role="user", content="Hello")
@@ -107,7 +107,8 @@ class TestChatCompletionRequest:
             frequency_penalty=0.5,
             presence_penalty=0.3,
             stop=["END", "STOP"],
-            stream=False
+            stream=False,
+            user_id="test-user"
         )
         
         assert len(request.messages) == 2
@@ -123,7 +124,7 @@ class TestChatCompletionRequest:
     def test_empty_messages_validation(self):
         """Test validation of empty messages list"""
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=[], model="gpt-3.5-turbo")
+            ChatRequest(messages=[], model="gpt-3.5-turbo", user_id="test-user")
     
     def test_invalid_temperature_validation(self):
         """Test temperature parameter validation"""
@@ -131,11 +132,11 @@ class TestChatCompletionRequest:
         
         # Too high temperature
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=messages, model="gpt-3.5-turbo", temperature=3.0)
+            ChatRequest(messages=messages, model="gpt-3.5-turbo", temperature=3.0, user_id="test-user")
         
         # Negative temperature
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=messages, model="gpt-3.5-turbo", temperature=-0.5)
+            ChatRequest(messages=messages, model="gpt-3.5-turbo", temperature=-0.5, user_id="test-user")
     
     def test_invalid_max_tokens_validation(self):
         """Test max_tokens parameter validation"""
@@ -143,11 +144,11 @@ class TestChatCompletionRequest:
         
         # Negative max_tokens
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=messages, model="gpt-3.5-turbo", max_tokens=-100)
+            ChatRequest(messages=messages, model="gpt-3.5-turbo", max_tokens=-100, user_id="test-user")
         
         # Zero max_tokens
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=messages, model="gpt-3.5-turbo", max_tokens=0)
+            ChatRequest(messages=messages, model="gpt-3.5-turbo", max_tokens=0, user_id="test-user")
     
     def test_invalid_probability_parameters(self):
         """Test top_p, frequency_penalty, presence_penalty validation"""
@@ -155,33 +156,35 @@ class TestChatCompletionRequest:
         
         # Invalid top_p (should be 0-1)
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=messages, model="gpt-3.5-turbo", top_p=1.5)
+            ChatRequest(messages=messages, model="gpt-3.5-turbo", top_p=1.5, user_id="test-user")
         
         # Invalid frequency_penalty (should be -2 to 2)
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=messages, model="gpt-3.5-turbo", frequency_penalty=3.0)
+            ChatRequest(messages=messages, model="gpt-3.5-turbo", frequency_penalty=3.0, user_id="test-user")
         
         # Invalid presence_penalty (should be -2 to 2)
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=messages, model="gpt-3.5-turbo", presence_penalty=-3.0)
+            ChatRequest(messages=messages, model="gpt-3.5-turbo", presence_penalty=-3.0, user_id="test-user")
     
     def test_stop_sequences_validation(self):
         """Test stop sequences validation"""
         messages = [ChatMessage(role="user", content="Test")]
         
         # Valid stop sequences
-        request = ChatCompletionRequest(
-            messages=messages, 
-            model="gpt-3.5-turbo", 
-            stop=["END", "STOP"]
+        request = ChatRequest(
+            messages=messages,
+            model="gpt-3.5-turbo",
+            stop=["END", "STOP"],
+            user_id="test-user"
         )
         assert request.stop == ["END", "STOP"]
         
         # Single stop sequence
-        request = ChatCompletionRequest(
-            messages=messages, 
-            model="gpt-3.5-turbo", 
-            stop="END"
+        request = ChatRequest(
+            messages=messages,
+            model="gpt-3.5-turbo",
+            stop="END",
+            user_id="test-user"
         )
         assert request.stop == "END"
     
@@ -199,20 +202,20 @@ class TestChatCompletionRequest:
         ]
         
         for model in valid_models:
-            request = ChatCompletionRequest(messages=messages, model=model)
+            request = ChatRequest(messages=messages, model=model, user_id="test-user")
             assert request.model == model
         
         # Empty model name should be invalid
         with pytest.raises(ValidationError):
-            ChatCompletionRequest(messages=messages, model="")
+            ChatRequest(messages=messages, model="", user_id="test-user")
 
 
-class TestUsage:
+class TestTokenUsage:
     """Test Usage model for token counting"""
     
     def test_valid_usage_creation(self):
         """Test creating valid usage objects"""
-        usage = Usage(
+        usage = TokenUsage(
             prompt_tokens=50,
             completion_tokens=25,
             total_tokens=75
@@ -226,19 +229,19 @@ class TestUsage:
         """Test usage token count validation"""
         # Negative tokens should be invalid
         with pytest.raises(ValidationError):
-            Usage(prompt_tokens=-1, completion_tokens=25, total_tokens=24)
+            TokenUsage(prompt_tokens=-1, completion_tokens=25, total_tokens=24)
         
         with pytest.raises(ValidationError):
-            Usage(prompt_tokens=50, completion_tokens=-1, total_tokens=49)
+            TokenUsage(prompt_tokens=50, completion_tokens=-1, total_tokens=49)
         
         with pytest.raises(ValidationError):
-            Usage(prompt_tokens=50, completion_tokens=25, total_tokens=-1)
+            TokenUsage(prompt_tokens=50, completion_tokens=25, total_tokens=-1)
     
     def test_usage_total_calculation_validation(self):
         """Test that total_tokens matches prompt + completion"""
         # Mismatched totals should be validated
         try:
-            usage = Usage(
+            usage = TokenUsage(
                 prompt_tokens=50,
                 completion_tokens=25,
                 total_tokens=100  # Should be 75
@@ -250,12 +253,12 @@ class TestUsage:
             pass
 
 
-class TestResponseMessage:
-    """Test ResponseMessage model for LLM responses"""
+class TestChatMessage:
+    """Test ChatMessage model for LLM responses"""
     
     def test_valid_response_message(self):
         """Test creating valid response messages"""
-        response_msg = ResponseMessage(
+        response_msg = ChatMessage(
             role="assistant",
             content="Hello! How can I help you today?"
         )
@@ -266,32 +269,40 @@ class TestResponseMessage:
     def test_empty_response_content(self):
         """Test handling of empty response content"""
         # Empty content may be valid for some use cases
-        response_msg = ResponseMessage(role="assistant", content="")
+        response_msg = ChatMessage(role="assistant", content="")
         assert response_msg.content == ""
     
     def test_function_call_response(self):
-        """Test response message with function calls"""
-        response_msg = ResponseMessage(
+        """Test response message with tool calls"""
+        from app.services.llm.models import ToolCall
+        response_msg = ChatMessage(
             role="assistant",
             content="I'll help you with that calculation.",
-            function_call={
-                "name": "calculate",
-                "arguments": '{"expression": "2+2"}'
-            }
+            tool_calls=[
+                ToolCall(
+                    id="call_1",
+                    type="function",
+                    function={
+                        "name": "calculate",
+                        "arguments": '{"expression": "2+2"}'
+                    }
+                )
+            ]
         )
-        
+
         assert response_msg.role == "assistant"
-        assert response_msg.function_call["name"] == "calculate"
+        assert len(response_msg.tool_calls) == 1
+        assert response_msg.tool_calls[0].function["name"] == "calculate"
 
 
-class TestChoice:
+class TestChatChoice:
     """Test Choice model for response choices"""
     
     def test_valid_choice_creation(self):
         """Test creating valid choice objects"""
-        choice = Choice(
+        choice = ChatChoice(
             index=0,
-            message=ResponseMessage(role="assistant", content="Test response"),
+            message=ChatMessage(role="assistant", content="Test response"),
             finish_reason="stop"
         )
         
@@ -305,9 +316,9 @@ class TestChoice:
         valid_reasons = ["stop", "length", "content_filter", "null"]
         
         for reason in valid_reasons:
-            choice = Choice(
+            choice = ChatChoice(
                 index=0,
-                message=ResponseMessage(role="assistant", content="Test"),
+                message=ChatMessage(role="assistant", content="Test"),
                 finish_reason=reason
             )
             assert choice.finish_reason == reason
@@ -316,31 +327,32 @@ class TestChoice:
         """Test choice index validation"""
         # Index should be non-negative
         with pytest.raises(ValidationError):
-            Choice(
+            ChatChoice(
                 index=-1,
-                message=ResponseMessage(role="assistant", content="Test"),
+                message=ChatMessage(role="assistant", content="Test"),
                 finish_reason="stop"
             )
 
 
-class TestChatCompletionResponse:
-    """Test ChatCompletionResponse model"""
+class TestChatResponse:
+    """Test ChatResponse model"""
     
     def test_valid_response_creation(self):
         """Test creating valid response objects"""
-        response = ChatCompletionResponse(
+        response = ChatResponse(
             id="chatcmpl-123",
             object="chat.completion",
             created=1677652288,
             model="gpt-3.5-turbo",
+            provider="test-provider",
             choices=[
-                Choice(
+                ChatChoice(
                     index=0,
-                    message=ResponseMessage(role="assistant", content="Test response"),
+                    message=ChatMessage(role="assistant", content="Test response"),
                     finish_reason="stop"
                 )
             ],
-            usage=Usage(prompt_tokens=10, completion_tokens=15, total_tokens=25)
+            usage=TokenUsage(prompt_tokens=10, completion_tokens=15, total_tokens=25)
         )
         
         assert response.id == "chatcmpl-123"
@@ -350,24 +362,25 @@ class TestChatCompletionResponse:
     
     def test_multiple_choices_response(self):
         """Test response with multiple choices"""
-        response = ChatCompletionResponse(
+        response = ChatResponse(
             id="chatcmpl-123",
             object="chat.completion",
             created=1677652288,
             model="gpt-3.5-turbo",
+            provider="test-provider",
             choices=[
-                Choice(
+                ChatChoice(
                     index=0,
-                    message=ResponseMessage(role="assistant", content="Response 1"),
+                    message=ChatMessage(role="assistant", content="Response 1"),
                     finish_reason="stop"
                 ),
-                Choice(
+                ChatChoice(
                     index=1,
-                    message=ResponseMessage(role="assistant", content="Response 2"),
+                    message=ChatMessage(role="assistant", content="Response 2"),
                     finish_reason="stop"
                 )
             ],
-            usage=Usage(prompt_tokens=10, completion_tokens=30, total_tokens=40)
+            usage=TokenUsage(prompt_tokens=10, completion_tokens=30, total_tokens=40)
         )
         
         assert len(response.choices) == 2
@@ -377,30 +390,32 @@ class TestChatCompletionResponse:
     def test_empty_choices_validation(self):
         """Test validation of empty choices list"""
         with pytest.raises(ValidationError):
-            ChatCompletionResponse(
+            ChatResponse(
                 id="chatcmpl-123",
                 object="chat.completion",
                 created=1677652288,
                 model="gpt-3.5-turbo",
+                provider="test-provider",
                 choices=[],
-                usage=Usage(prompt_tokens=10, completion_tokens=15, total_tokens=25)
+                usage=TokenUsage(prompt_tokens=10, completion_tokens=15, total_tokens=25)
             )
     
     def test_response_serialization(self):
         """Test response serialization to OpenAI format"""
-        response = ChatCompletionResponse(
+        response = ChatResponse(
             id="chatcmpl-123",
             object="chat.completion",
             created=1677652288,
             model="gpt-3.5-turbo",
+            provider="test-provider",
             choices=[
-                Choice(
+                ChatChoice(
                     index=0,
-                    message=ResponseMessage(role="assistant", content="Test response"),
+                    message=ChatMessage(role="assistant", content="Test response"),
                     finish_reason="stop"
                 )
             ],
-            usage=Usage(prompt_tokens=10, completion_tokens=15, total_tokens=25)
+            usage=TokenUsage(prompt_tokens=10, completion_tokens=15, total_tokens=25)
         )
         
         serialized = response.dict()
@@ -437,11 +452,12 @@ class TestModelCompatibility:
                 {"role": "user", "content": "Hello"}
             ],
             "temperature": 0.7,
-            "max_tokens": 150
+            "max_tokens": 150,
+            "user_id": "test-user"
         }
         
         # Should be able to create our model from OpenAI format
-        request = ChatCompletionRequest(**openai_request)
+        request = ChatRequest(**openai_request)
         
         assert request.model == "gpt-3.5-turbo"
         assert len(request.messages) == 1
@@ -452,18 +468,20 @@ class TestModelCompatibility:
     
     def test_streaming_request_handling(self):
         """Test handling of streaming requests"""
-        streaming_request = ChatCompletionRequest(
+        streaming_request = ChatRequest(
             messages=[ChatMessage(role="user", content="Test")],
             model="gpt-3.5-turbo",
-            stream=True
+            stream=True,
+            user_id="test-user"
         )
         
         assert streaming_request.stream is True
         
         # Non-streaming request
-        regular_request = ChatCompletionRequest(
+        regular_request = ChatRequest(
             messages=[ChatMessage(role="user", content="Test")],
             model="gpt-3.5-turbo",
+            user_id="test-user",
             stream=False
         )
         
@@ -475,7 +493,7 @@ COVERAGE ANALYSIS FOR LLM MODELS:
 
 ✅ Model Validation (15+ tests):
 - ChatMessage role and content validation
-- ChatCompletionRequest parameter validation
+- ChatRequest parameter validation
 - Response model structure validation
 - Usage token counting validation
 - Choice and finish_reason validation

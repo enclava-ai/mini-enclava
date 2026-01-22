@@ -58,6 +58,10 @@ numpy>=1.26.0
 markitdown==0.0.1a2
 python-docx==1.1.0
 
+# Image processing for Extract module
+Pillow==10.2.0
+pdf2image==1.17.0
+
 # Advanced NLP processing (OPTIONAL - only for entity extraction)
 # Install requirements-nlp.txt separately if you need these features:
 # nltk==3.8.1
