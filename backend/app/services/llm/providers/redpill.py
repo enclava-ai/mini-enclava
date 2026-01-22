@@ -178,25 +178,36 @@ class RedPillProvider(BaseLLMProvider):
                             continue
 
                         # Extract all information directly from API response
-                        # Determine capabilities based on tasks field
-                        tasks = model_data.get("tasks", [])
+                        # Redpill API uses input_modalities/output_modalities instead of tasks
+                        input_modalities = model_data.get("input_modalities", [])
+                        output_modalities = model_data.get("output_modalities", [])
+                        supported_features = model_data.get("supported_features", [])
                         capabilities = []
 
                         # All RedPill confidential models have TEE capability
                         capabilities.append("tee")
                         capabilities.append("attestation")
 
-                        # Add capabilities based on tasks
-                        if "generate" in tasks:
+                        # Add capabilities based on modalities
+                        # Chat capability: model accepts text input and produces text output
+                        if "text" in input_modalities and "text" in output_modalities:
                             capabilities.append("chat")
-                        if "embed" in tasks or "embedding" in tasks:
+
+                        # Embeddings capability: check model name for embedding models
+                        model_name_lower = model_id.lower()
+                        if "embed" in model_name_lower or "embedding" in model_name_lower:
                             capabilities.append("embeddings")
-                        if "vision" in tasks:
+
+                        # Vision capability: model accepts image input
+                        if "image" in input_modalities:
                             capabilities.append("vision")
 
-                        # Check for function calling support in the API response
-                        supports_function_calling = model_data.get(
-                            "supports_function_calling", False
+                        # Function calling support: check supported_features or infer from model type
+                        # Many modern models support function calling even if not explicitly listed
+                        supports_function_calling = (
+                            "function_calling" in supported_features
+                            or "tools" in supported_features
+                            or model_data.get("supports_function_calling", False)
                         )
                         if supports_function_calling:
                             capabilities.append("function_calling")
@@ -208,13 +219,15 @@ class RedPillProvider(BaseLLMProvider):
                             owned_by=model_data.get("owned_by", "redpill"),
                             provider=self.provider_name,
                             capabilities=capabilities,
-                            context_window=model_data.get("context_window"),
-                            max_output_tokens=model_data.get("max_output_tokens"),
-                            supports_streaming=model_data.get(
-                                "supports_streaming", True
-                            ),
+                            # Redpill uses context_length instead of context_window
+                            context_window=model_data.get("context_length") or model_data.get("context_window"),
+                            # Redpill uses max_output_length instead of max_output_tokens
+                            max_output_tokens=model_data.get("max_output_length") or model_data.get("max_output_tokens"),
+                            # Streaming is generally supported by all models
+                            supports_streaming=model_data.get("supports_streaming", True),
                             supports_function_calling=supports_function_calling,
-                            tasks=tasks,  # Pass through tasks field from RedPill API
+                            # Store modalities for reference
+                            tasks=input_modalities,  # Store input_modalities as tasks for compatibility
                         )
                         models.append(model_info)
 

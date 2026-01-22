@@ -150,24 +150,35 @@ class PrivateModeProvider(BaseLLMProvider):
                             continue
 
                         # Extract all information directly from API response
-                        # Determine capabilities based on tasks field
+                        # Support both Redpill-style (input_modalities) and legacy (tasks) formats
+                        input_modalities = model_data.get("input_modalities", [])
+                        output_modalities = model_data.get("output_modalities", [])
                         tasks = model_data.get("tasks", [])
+                        supported_features = model_data.get("supported_features", [])
                         capabilities = []
 
                         # All PrivateMode models have TEE capability
                         capabilities.append("tee")
 
-                        # Add capabilities based on tasks
-                        if "generate" in tasks:
+                        # Add capabilities based on modalities (Redpill-style) or tasks (legacy)
+                        # Chat capability
+                        if ("text" in input_modalities and "text" in output_modalities) or "generate" in tasks:
                             capabilities.append("chat")
-                        if "embed" in tasks or "embedding" in tasks:
+
+                        # Embeddings capability
+                        model_name_lower = model_id.lower()
+                        if "embed" in tasks or "embedding" in tasks or "embed" in model_name_lower:
                             capabilities.append("embeddings")
-                        if "vision" in tasks:
+
+                        # Vision capability
+                        if "image" in input_modalities or "vision" in tasks:
                             capabilities.append("vision")
 
-                        # Check for function calling support in the API response
-                        supports_function_calling = model_data.get(
-                            "supports_function_calling", False
+                        # Function calling support
+                        supports_function_calling = (
+                            "function_calling" in supported_features
+                            or "tools" in supported_features
+                            or model_data.get("supports_function_calling", False)
                         )
                         if supports_function_calling:
                             capabilities.append("function_calling")
@@ -179,13 +190,13 @@ class PrivateModeProvider(BaseLLMProvider):
                             owned_by=model_data.get("owned_by", "privatemode"),
                             provider=self.provider_name,
                             capabilities=capabilities,
-                            context_window=model_data.get("context_window"),
-                            max_output_tokens=model_data.get("max_output_tokens"),
-                            supports_streaming=model_data.get(
-                                "supports_streaming", True
-                            ),
+                            # Support both field naming conventions
+                            context_window=model_data.get("context_length") or model_data.get("context_window"),
+                            max_output_tokens=model_data.get("max_output_length") or model_data.get("max_output_tokens"),
+                            supports_streaming=model_data.get("supports_streaming", True),
                             supports_function_calling=supports_function_calling,
-                            tasks=tasks,  # Pass through tasks field from PrivateMode API
+                            # Store modalities or tasks for reference
+                            tasks=input_modalities if input_modalities else tasks,
                         )
                         models.append(model_info)
 
