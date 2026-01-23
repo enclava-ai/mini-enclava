@@ -26,6 +26,7 @@ from app.services.cost_calculator import CostCalculator
 from app.models.api_key import APIKey
 from app.models.extract_job import ExtractJob
 from app.models.extract_result import ExtractResult
+from app.models.extract_settings import ExtractSettings
 from app.models.user import User
 from app.services.api_key_auth import APIKeyAuthService
 from app.services.async_budget_enforcement import (
@@ -114,8 +115,10 @@ class ExtractService:
             # 3. Get template
             template = await template_manager.get_template(template_id)
 
-            # 4. Get model from config
-            model_name = config.get("vision_model", "gpt-4o")
+            # 4. Get model (priority: template.model > settings.default_model > config > fallback)
+            model_name = await self._get_model_for_processing(
+                db, template, config
+            )
             job.model_used = model_name
 
             # 5. Estimate tokens for budget check
@@ -281,6 +284,56 @@ class ExtractService:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": content},
         ]
+
+    async def _get_model_for_processing(
+        self, db: AsyncSession, template, config: dict
+    ) -> str:
+        """
+        Get model for processing with priority cascade:
+        1. Template-specific model (template.model)
+        2. Module default model (settings.default_model)
+        3. First available vision model from platform
+
+        Raises ProcessingError if no vision models available.
+        """
+        # Check template override first
+        if template.model:
+            logger.debug(f"Using template-specific model: {template.model}")
+            return template.model
+
+        # Check module settings
+        try:
+            stmt = select(ExtractSettings).where(ExtractSettings.id == 1)
+            result = await db.execute(stmt)
+            settings = result.scalar_one_or_none()
+            if settings and settings.default_model:
+                logger.debug(f"Using module default model: {settings.default_model}")
+                return settings.default_model
+        except Exception as e:
+            logger.warning(f"Failed to load extract settings: {e}")
+
+        # Get first available vision model from platform
+        try:
+            vision_models = await self._get_available_vision_models()
+            if not vision_models:
+                raise ProcessingError(
+                    "No vision-capable models available. "
+                    "Please configure a model in Extract settings or contact administrator."
+                )
+
+            model = vision_models[0].id
+            logger.info(f"Auto-selected first available vision model: {model}")
+            return model
+        except Exception as e:
+            raise ProcessingError(
+                f"Failed to get available vision models: {e}"
+            )
+
+    async def _get_available_vision_models(self):
+        """Get list of vision-capable models from LLM service."""
+        all_models = await llm_service.get_models()
+        vision_models = [m for m in all_models if "vision" in m.capabilities]
+        return vision_models
 
     def _estimate_tokens(self, images: list, template) -> int:
         """

@@ -15,15 +15,18 @@ from fastapi import (
     UploadFile,
     status,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_extract_auth_context
 from app.db.database import get_db
 from app.models.api_key import APIKey
+from app.models.extract_settings import ExtractSettings
 from app.models.user import User
-from app.services.api_key_auth import get_api_key_context
 from app.modules.extract.exceptions import TemplateExistsError, TemplateNotFoundError
 from app.modules.extract.schemas import (
+    ExtractSettingsResponse,
+    ExtractSettingsUpdate,
     JobDetailResponse,
     JobListResponse,
     ProcessResponse,
@@ -52,8 +55,7 @@ async def process_document(
     template: Optional[str] = Form(None, description="Template ID to use"),
     context: Optional[str] = Form(None, description="JSON context for template placeholders"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    api_key_context: Optional[Dict[str, Any]] = Depends(get_api_key_context),
+    auth: tuple[Dict[str, Any], Optional[APIKey]] = Depends(get_extract_auth_context),
 ):
     """
     Process a document and extract structured data.
@@ -62,9 +64,11 @@ async def process_document(
 
     The extraction uses the specified template or the default template
     if not specified. Context can include variables like company_name, currency, etc.
+
+    Authentication: JWT (frontend) or API key (external)
+    Required scope (API key): extract.process
     """
-    # Extract API key from context if present
-    api_key = api_key_context.get("api_key") if api_key_context else None
+    current_user, api_key = auth
 
     # Parse context JSON
     context_dict = None
@@ -85,12 +89,35 @@ async def process_document(
     }
     template_id = template or config.get("default_template", "detailed_invoice")
 
+    # API key permission checks
+    if api_key:
+        # Check scope
+        if not api_key.has_scope("extract.process"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Scope 'extract.process' required"
+            )
+
+        # Check template access
+        if not api_key.can_access_template(template_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Not authorized to use template '{template_id}'"
+            )
+
+    # Convert user dict to User object for extract_service
+    user_obj = User(
+        id=current_user["id"],
+        email=current_user.get("email"),
+        is_superuser=current_user.get("is_superuser", False),
+    )
+
     result = await extract_service.process_document(
         db=db,
         file=file,
         template_id=template_id,
         context=context_dict,
-        current_user=current_user,
+        current_user=user_obj,
         api_key=api_key,
         config=config,
     )
@@ -107,20 +134,48 @@ async def list_jobs(
     offset: int = Query(0, ge=0, description="Results to skip"),
     status: Optional[str] = Query(None, description="Filter by status"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: tuple[Dict[str, Any], Optional[APIKey]] = Depends(get_extract_auth_context),
 ):
-    """List Extract jobs for the current user."""
-    return await extract_service.list_jobs(db, current_user.id, limit, offset, status)
+    """
+    List Extract jobs for the current user.
+
+    Authentication: JWT (frontend) or API key (external)
+    Required scope (API key): extract.jobs
+    """
+    current_user, api_key = auth
+
+    # API key scope check
+    if api_key and not api_key.has_scope("extract.jobs"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Scope 'extract.jobs' required"
+        )
+
+    return await extract_service.list_jobs(db, current_user["id"], limit, offset, status)
 
 
 @router.get("/jobs/{job_id}", response_model=JobDetailResponse)
 async def get_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: tuple[Dict[str, Any], Optional[APIKey]] = Depends(get_extract_auth_context),
 ):
-    """Get job details and extraction result."""
-    return await extract_service.get_job(db, str(job_id), current_user.id)
+    """
+    Get job details and extraction result.
+
+    Authentication: JWT (frontend) or API key (external)
+    Required scope (API key): extract.jobs
+    """
+    current_user, api_key = auth
+
+    # API key scope check
+    if api_key and not api_key.has_scope("extract.jobs"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Scope 'extract.jobs' required"
+        )
+
+    return await extract_service.get_job(db, str(job_id), current_user["id"])
 
 
 # --- Template Management ---
@@ -129,9 +184,23 @@ async def get_job(
 @router.get("/templates", response_model=TemplateListResponse)
 async def list_templates(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: tuple[Dict[str, Any], Optional[APIKey]] = Depends(get_extract_auth_context),
 ):
-    """List all extraction templates."""
+    """
+    List all extraction templates.
+
+    Authentication: JWT (frontend) or API key (external)
+    Required scope (API key): extract.templates
+    """
+    current_user, api_key = auth
+
+    # API key scope check
+    if api_key and not api_key.has_scope("extract.templates"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Scope 'extract.templates' required"
+        )
+
     manager = TemplateManager(db)
     templates = await manager.list_templates()
     return TemplateListResponse(templates=templates)
@@ -263,6 +332,118 @@ async def template_wizard(
             "fields": template_data.get("fields", []),
         }
     }
+
+
+# --- Settings ---
+
+
+@router.get("/models")
+async def get_vision_models():
+    """
+    Get available vision-capable models from the platform.
+
+    Public endpoint (no auth required for discovery).
+    """
+    from app.services.llm.service import llm_service
+
+    try:
+        all_models = await llm_service.get_models()
+        vision_models = [m for m in all_models if "vision" in m.capabilities]
+
+        return {
+            "models": [
+                {
+                    "id": m.id,
+                    "name": m.id,  # Use id as name for now
+                    "provider": m.provider,
+                    "supports_vision": True,
+                }
+                for m in vision_models
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load available models: {str(e)}",
+        )
+
+
+@router.get("/settings", response_model=ExtractSettingsResponse)
+async def get_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get Extract module settings.
+
+    JWT authentication only (not available via API key).
+    Auto-populates default_model with first available vision model if not set.
+    """
+    from app.services.llm.service import llm_service
+
+    stmt = select(ExtractSettings).where(ExtractSettings.id == 1)
+    result = await db.execute(stmt)
+    settings = result.scalar_one_or_none()
+
+    # Auto-populate default_model if not set
+    if not settings or not settings.default_model:
+        # Get first available vision model
+        try:
+            all_models = await llm_service.get_models()
+            vision_models = [m for m in all_models if "vision" in m.capabilities]
+
+            if not vision_models:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="No vision-capable models available in the platform",
+                )
+
+            first_model = vision_models[0].id
+
+            if not settings:
+                settings = ExtractSettings(id=1, default_model=first_model)
+                db.add(settings)
+            else:
+                settings.default_model = first_model
+
+            await db.commit()
+            await db.refresh(settings)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to initialize settings: {str(e)}",
+            )
+
+    return settings
+
+
+@router.put("/settings", response_model=ExtractSettingsResponse)
+async def update_settings(
+    settings_data: ExtractSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update Extract module settings.
+
+    JWT authentication only (not available via API key).
+    """
+    stmt = select(ExtractSettings).where(ExtractSettings.id == 1)
+    result = await db.execute(stmt)
+    settings = result.scalar_one_or_none()
+
+    if not settings:
+        settings = ExtractSettings(id=1)
+        db.add(settings)
+
+    settings.default_model = settings_data.default_model
+    await db.commit()
+    await db.refresh(settings)
+
+    return settings
 
 
 # --- Health ---

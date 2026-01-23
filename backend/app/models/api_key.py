@@ -54,6 +54,9 @@ class APIKey(Base):
     allowed_agents = Column(
         JSON, default=list
     )  # List of allowed agent config IDs for agent-specific keys
+    allowed_extract_templates = Column(
+        JSON, default=list
+    )  # List of allowed extract template IDs for extract-specific keys
 
     # Budget configuration
     is_unlimited = Column(Boolean, default=True)  # Unlimited budget flag
@@ -124,6 +127,7 @@ class APIKey(Base):
             "allowed_ips": self.allowed_ips,
             "allowed_chatbots": self.allowed_chatbots,
             "allowed_agents": self.allowed_agents,
+            "allowed_extract_templates": self.allowed_extract_templates,
             "description": self.description,
             "tags": self.tags,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -198,6 +202,12 @@ class APIKey(Base):
             return True
         # Convert to string for comparison since JSON stores as strings
         return str(agent_id) in [str(a) for a in self.allowed_agents]
+
+    def can_access_template(self, template_id: str) -> bool:
+        """Check if the API key can access a specific extract template"""
+        if not self.allowed_extract_templates:  # Empty list means all templates allowed
+            return True
+        return template_id in self.allowed_extract_templates
 
     def update_usage(self, tokens_used: int = 0, cost_cents: int = 0):
         """Update usage statistics"""
@@ -309,6 +319,16 @@ class APIKey(Base):
         """Remove an allowed agent config"""
         agent_id_str = str(agent_id)
         self.allowed_agents = [a for a in self.allowed_agents if str(a) != agent_id_str]
+
+    def add_allowed_template(self, template_id: str):
+        """Add an allowed extract template"""
+        if template_id not in self.allowed_extract_templates:
+            self.allowed_extract_templates.append(template_id)
+
+    def remove_allowed_template(self, template_id: str):
+        """Remove an allowed extract template"""
+        if template_id in self.allowed_extract_templates:
+            self.allowed_extract_templates.remove(template_id)
 
     @classmethod
     def create_default_key(
@@ -425,4 +445,35 @@ class APIKey(Base):
             allowed_agents=[str(agent_id)],
             description=f"API key for agent: {agent_name}",
             tags=["agent", f"agent-{agent_id}"],
+        )
+
+    @classmethod
+    def create_extract_key(
+        cls,
+        user_id: int,
+        name: str,
+        key_hash: str,
+        key_prefix: str,
+        template_ids: Optional[List[str]] = None,
+    ) -> "APIKey":
+        """Create an extract-specific API key"""
+        return cls(
+            name=name,
+            key_hash=key_hash,
+            key_prefix=key_prefix,
+            user_id=user_id,
+            is_active=True,
+            permissions={"extract": True},
+            scopes=["extract.process", "extract.jobs", "extract.templates"],
+            # Rate limits will use model defaults (60/min, 3600/hour, 86400/day)
+            allowed_models=[],  # Will use template's configured model
+            allowed_endpoints=[
+                "/api/v1/extract/process",
+                "/api/v1/extract/jobs",
+                "/api/v1/extract/templates",
+            ],
+            allowed_ips=[],
+            allowed_extract_templates=template_ids or [],
+            description=f"API key for Extract: {', '.join(template_ids) if template_ids else 'all templates'}",
+            tags=["extract"] + ([f"template-{t}" for t in template_ids] if template_ids else []),
         )

@@ -18,6 +18,7 @@ from ..v1.plugin_registry import router as plugin_registry_router
 from ..v1.platform import router as platform_router
 from ..v1.llm_internal import router as llm_internal_router
 from ..v1.chatbot import router as chatbot_router
+from ..v1.extract import router as extract_router
 from .debugging import router as debugging_router
 from ..v1.endpoints.user_management import router as user_management_router
 from ..v1.endpoints.tool_calling import router as tool_calling_router
@@ -102,6 +103,11 @@ internal_api_router.include_router(
 # Include chatbot routes (frontend chatbot management)
 internal_api_router.include_router(
     chatbot_router, prefix="/chatbot", tags=["internal-chatbot"]
+)
+
+# Include extract routes (frontend extract document processing)
+internal_api_router.include_router(
+    extract_router, prefix="/extract", tags=["internal-extract"]
 )
 
 # Include debugging routes (troubleshooting and diagnostics)

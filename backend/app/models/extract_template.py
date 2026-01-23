@@ -36,6 +36,7 @@ class ExtractTemplate(Base):
     user_prompt = Column(Text, nullable=False)
     output_schema = Column(JSONB, nullable=True)
     context_schema = Column(JSONB, nullable=True)
+    model = Column(String(100), nullable=True)  # Optional vision model override
 
     is_default = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)

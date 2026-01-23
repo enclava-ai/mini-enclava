@@ -23,6 +23,7 @@ class TemplateCreate(BaseModel):
     context_schema: Optional[Dict[str, Any]] = Field(
         None, description="Defines context variables (e.g., company_name, currency)"
     )
+    model: Optional[str] = Field(None, description="Vision model to use (overrides module default)")
 
 
 class TemplateUpdate(BaseModel):
@@ -33,6 +34,7 @@ class TemplateUpdate(BaseModel):
     user_prompt: Optional[str] = None
     output_schema: Optional[Dict[str, Any]] = None
     context_schema: Optional[Dict[str, Any]] = None
+    model: Optional[str] = None
 
 
 class TemplateResponse(BaseModel):
@@ -46,6 +48,7 @@ class TemplateResponse(BaseModel):
     user_prompt: str
     output_schema: Optional[Dict[str, Any]]
     context_schema: Optional[Dict[str, Any]]
+    model: Optional[str]
     is_default: bool
     is_active: bool
     created_at: datetime
@@ -160,3 +163,21 @@ class ModelsResponse(BaseModel):
     """Response for models endpoint."""
 
     models: List[ModelInfo]
+
+
+# Settings schemas
+class ExtractSettingsUpdate(BaseModel):
+    """Schema for updating extract settings."""
+
+    default_model: str = Field(..., description="Default vision model for all templates")
+
+
+class ExtractSettingsResponse(BaseModel):
+    """Schema for extract settings response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    default_model: Optional[str]  # Can be null until first vision model is selected
+    created_at: datetime
+    updated_at: Optional[datetime]

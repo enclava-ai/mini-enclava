@@ -264,6 +264,8 @@ class CachedAPIKeyService:
         try:
             now = datetime.now(timezone.utc)
             now_iso = now.isoformat()
+            # Create naive datetime for database (TIMESTAMP WITHOUT TIME ZONE)
+            now_naive = now.replace(tzinfo=None)
 
             # Always update the cached timestamp for accurate reporting
             timestamp_cache_key = f"last_used_ts:{api_key_id}"
@@ -288,7 +290,7 @@ class CachedAPIKeyService:
             api_key = result.scalar_one_or_none()
 
             if api_key:
-                api_key.last_used_at = now
+                api_key.last_used_at = now_naive
                 await db.commit()
 
                 # Mark that we've updated DB recently (5 min throttle for DB writes only)

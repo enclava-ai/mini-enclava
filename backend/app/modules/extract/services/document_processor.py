@@ -74,7 +74,11 @@ class DocumentProcessor:
         )
 
         # Convert to images based on type
-        if file.content_type == "application/pdf":
+        # Check file extension instead of content_type (which may be None)
+        filename = file.filename or ""
+        ext = Path(filename).suffix.lower()
+
+        if ext == ".pdf" or file.content_type == "application/pdf":
             images = self._convert_pdf_to_images(content)
             logger.debug("Converted PDF to %d images", len(images))
         else:
@@ -110,9 +114,22 @@ class DocumentProcessor:
                 f"Allowed types: {', '.join(self.ALLOWED_EXTENSIONS)}"
             )
 
-        # Check MIME type
-        if file.content_type not in self.ALLOWED_MIME_TYPES:
-            raise InvalidFileError(f"MIME type '{file.content_type}' not allowed")
+        # Check MIME type (with fallback to extension if content_type is None)
+        content_type = file.content_type
+
+        # If content_type is None, infer from file extension
+        if content_type is None:
+            mime_type_map = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".pdf": "application/pdf",
+            }
+            content_type = mime_type_map.get(ext)
+            logger.info(f"Content-Type was None, inferred {content_type} from extension {ext}")
+
+        if content_type not in self.ALLOWED_MIME_TYPES:
+            raise InvalidFileError(f"MIME type '{content_type}' not allowed")
 
         # Check size
         file.file.seek(0, 2)

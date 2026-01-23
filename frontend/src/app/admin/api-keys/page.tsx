@@ -59,6 +59,7 @@ interface ApiKey {
   allowed_models: string[];
   allowed_chatbots: string[];
   allowed_agents: string[];
+  allowed_extract_templates: string[];
 }
 
 interface Model {
@@ -89,6 +90,7 @@ interface NewApiKeyData {
   allowed_models: string[];
   allowed_chatbots: string[];
   allowed_agents: string[];
+  allowed_extract_templates: string[];
 }
 
 interface AgentConfig {
@@ -97,10 +99,18 @@ interface AgentConfig {
   description?: string;
 }
 
+interface ExtractTemplate {
+  id: string;
+  description: string;
+}
+
 const PERMISSION_OPTIONS = [
   { value: "chat.completions", label: "LLM Chat Completions" },
   { value: "embeddings.create", label: "LLM Embeddings" },
   { value: "models.list", label: "List Models" },
+  { value: "extract.process", label: "Extract - Process Documents" },
+  { value: "extract.jobs", label: "Extract - View Jobs" },
+  { value: "extract.templates", label: "Extract - List Templates" },
 ];
 
 function ApiKeysContent() {
@@ -119,6 +129,7 @@ function ApiKeysContent() {
   const [availableModels, setAvailableModels] = useState<Model[]>([]);
   const [availableChatbots, setAvailableChatbots] = useState<any[]>([]);
   const [availableAgents, setAvailableAgents] = useState<AgentConfig[]>([]);
+  const [availableTemplates, setAvailableTemplates] = useState<ExtractTemplate[]>([]);
 
   const [newKeyData, setNewKeyData] = useState<NewApiKeyData>({
     name: "",
@@ -131,6 +142,7 @@ function ApiKeysContent() {
     allowed_models: [],
     allowed_chatbots: [],
     allowed_agents: [],
+    allowed_extract_templates: [],
   });
 
   useEffect(() => {
@@ -138,6 +150,7 @@ function ApiKeysContent() {
     fetchAvailableModels();
     fetchAvailableChatbots();
     fetchAvailableAgents();
+    fetchAvailableTemplates();
     
     // Check URL parameters for auto-opening create dialog
     const chatbotId = searchParams.get('chatbot');
@@ -209,6 +222,15 @@ function ApiKeysContent() {
     }
   };
 
+  const fetchAvailableTemplates = async () => {
+    try {
+      const result = await apiClient.get("/api-internal/v1/extract/templates") as any;
+      setAvailableTemplates(result.templates || []);
+    } catch (error) {
+      setAvailableTemplates([]);
+    }
+  };
+
   const handleCreateApiKey = async () => {
     try {
       setActionLoading("create");
@@ -232,6 +254,7 @@ function ApiKeysContent() {
         allowed_models: [],
         allowed_chatbots: [],
         allowed_agents: [],
+        allowed_extract_templates: [],
       });
 
       await fetchApiKeys();
@@ -333,6 +356,7 @@ function ApiKeysContent() {
         allowed_models: editKeyData.allowed_models,
         allowed_chatbots: editKeyData.allowed_chatbots,
         allowed_agents: editKeyData.allowed_agents,
+        allowed_extract_templates: editKeyData.allowed_extract_templates,
       });
 
       toast({
@@ -366,6 +390,7 @@ function ApiKeysContent() {
       allowed_models: apiKey.allowed_models || [],
       allowed_chatbots: apiKey.allowed_chatbots || [],
       allowed_agents: apiKey.allowed_agents || [],
+      allowed_extract_templates: apiKey.allowed_extract_templates || [],
     });
     setShowEditDialog(apiKey.id);
   };
@@ -602,6 +627,41 @@ function ApiKeysContent() {
                   ))}
                   {availableAgents.length === 0 && (
                     <p className="text-sm text-muted-foreground">No agents available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Extract Template Restrictions */}
+              <div className="space-y-2">
+                <Label>Extract Template Restrictions (Optional)</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Leave empty to allow all extract templates, or select specific templates to restrict access.
+                </p>
+                <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                  {availableTemplates.map((template) => (
+                    <div key={template.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`template-${template.id}`}
+                        checked={newKeyData.allowed_extract_templates.includes(template.id)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setNewKeyData(prev => ({
+                            ...prev,
+                            allowed_extract_templates: checked
+                              ? [...prev.allowed_extract_templates, template.id]
+                              : prev.allowed_extract_templates.filter(t => t !== template.id)
+                          }));
+                        }}
+                        className="rounded"
+                      />
+                      <Label htmlFor={`template-${template.id}`} className="text-sm">
+                        {template.id} - {template.description}
+                      </Label>
+                    </div>
+                  ))}
+                  {availableTemplates.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No extract templates available</p>
                   )}
                 </div>
               </div>
@@ -1037,6 +1097,41 @@ function ApiKeysContent() {
                 ))}
                 {availableAgents.length === 0 && (
                   <p className="text-sm text-muted-foreground">No agents available</p>
+                )}
+              </div>
+            </div>
+
+            {/* Extract Template Restrictions */}
+            <div className="space-y-2">
+              <Label>Extract Template Restrictions (Optional)</Label>
+              <p className="text-sm text-muted-foreground mb-2">
+                Leave empty to allow all extract templates, or select specific templates to restrict access.
+              </p>
+              <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                {availableTemplates.map((template) => (
+                  <div key={template.id} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`edit-template-${template.id}`}
+                      checked={(editKeyData.allowed_extract_templates || []).includes(template.id)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditKeyData(prev => ({
+                          ...prev,
+                          allowed_extract_templates: checked
+                            ? [...(prev.allowed_extract_templates || []), template.id]
+                            : (prev.allowed_extract_templates || []).filter(t => t !== template.id)
+                        }));
+                      }}
+                      className="rounded"
+                    />
+                    <Label htmlFor={`edit-template-${template.id}`} className="text-sm">
+                      {template.id} - {template.description}
+                    </Label>
+                  </div>
+                ))}
+                {availableTemplates.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No extract templates available</p>
                 )}
               </div>
             </div>

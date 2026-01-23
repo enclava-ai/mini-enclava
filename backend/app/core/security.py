@@ -346,6 +346,88 @@ async def get_current_superuser(
     return current_user
 
 
+async def get_current_user_optional(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> Optional[Dict[str, Any]]:
+    """
+    Get current user from JWT if present, otherwise None.
+
+    This allows endpoints to support both JWT and API key authentication.
+    """
+    try:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return None
+
+        token = auth_header[7:]
+        # Skip API keys (don't start with eyJ)
+        if not token.startswith("eyJ"):
+            return None
+
+        # Use existing get_current_user logic
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials=token
+        )
+        return await get_current_user(credentials, db)
+    except Exception:
+        return None
+
+
+async def get_extract_auth_context(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional),
+) -> tuple[Dict[str, Any], Optional[Any]]:
+    """
+    Get authenticated user and optional API key for extract endpoints.
+
+    Supports dual authentication: JWT (frontend) or API key (external).
+
+    Returns:
+        tuple: (user_dict, api_key_or_none)
+
+    Raises:
+        HTTPException: 401 if neither JWT nor API key is provided
+    """
+    # Import here to avoid circular dependency
+    from app.services.api_key_auth import get_api_key_context
+    from app.models.user import User
+
+    api_key_context = await get_api_key_context(request, db)
+
+    if current_user:
+        # JWT authentication (frontend)
+        api_key = api_key_context.get("api_key") if api_key_context else None
+        return current_user, api_key
+    elif api_key_context:
+        # API key authentication (external)
+        user_obj = api_key_context["user"]
+
+        # Convert User ORM object to dictionary format
+        if isinstance(user_obj, User):
+            user_dict = {
+                "id": user_obj.id,
+                "email": user_obj.email,
+                "username": user_obj.username,
+                "is_active": user_obj.is_active,
+                "is_superuser": user_obj.is_superuser,
+                "role_id": user_obj.role_id,
+            }
+        else:
+            # Already a dict
+            user_dict = user_obj
+
+        return user_dict, api_key_context["api_key"]
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required (JWT or API key)",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 def generate_api_key() -> str:
     """Generate a new API key"""
     import secrets
