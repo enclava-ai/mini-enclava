@@ -455,6 +455,10 @@ class ExtractService:
         if not validation_result.has_errors:
             job.status = "completed"
             job.completed_at = datetime.utcnow()
+        else:
+            # Mark job as complete with errors - don't leave it stuck in processing
+            job.status = "completed_with_errors"
+            job.completed_at = datetime.utcnow()
 
         await db.commit()
         await db.refresh(result)
@@ -507,12 +511,20 @@ class ExtractService:
         if not job:
             raise ProcessingError("Job not found")
 
-        # Get final result if available
+        # Get result - prefer final, fall back to latest (for completed_with_errors)
         result_data = None
+        validation_errors = None
+        validation_warnings = None
         if job.results:
             final_results = [r for r in job.results if r.is_final]
             if final_results:
                 result_data = final_results[0].parsed_data
+            else:
+                # Return latest result even if not final (e.g., completed_with_errors)
+                latest = max(job.results, key=lambda r: r.attempt_number)
+                result_data = latest.parsed_data
+                validation_errors = latest.validation_errors
+                validation_warnings = latest.validation_warnings
 
         return {
             "id": str(job.id),
@@ -533,4 +545,6 @@ class ExtractService:
             "completed_at": job.completed_at,
             "error_message": job.error_message,
             "result": result_data,
+            "validation_errors": validation_errors,
+            "validation_warnings": validation_warnings,
         }

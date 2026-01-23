@@ -157,6 +157,7 @@ class CachedAPIKeyService:
                     "budget_type": api_key.budget_type,
                     "allowed_chatbots": api_key.allowed_chatbots,
                     "allowed_agents": api_key.allowed_agents,
+                    "allowed_extract_templates": api_key.allowed_extract_templates,
                     # Soft delete fields (should always be None for cached keys)
                     "deleted_at": api_key.deleted_at.isoformat()
                     if api_key.deleted_at
