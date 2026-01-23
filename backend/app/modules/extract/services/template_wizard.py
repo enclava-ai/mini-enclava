@@ -6,7 +6,9 @@ Analyzes sample documents and generates appropriate extraction templates.
 
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.llm.models import ChatRequest
 from app.services.llm.service import llm_service
@@ -55,7 +57,12 @@ class TemplateWizardService:
     """Service for generating templates from sample documents."""
 
     async def analyze_document(
-        self, image_b64: str, model_name: str = "gpt-4o"
+        self,
+        image_b64: str,
+        model_name: str = "gpt-4o",
+        db: Optional[AsyncSession] = None,
+        user_id: Optional[int] = None,
+        api_key_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Analyze a document image and generate a template.
@@ -63,6 +70,9 @@ class TemplateWizardService:
         Args:
             image_b64: Base64-encoded document image
             model_name: Vision model to use
+            db: Database session for usage recording
+            user_id: User ID for attribution
+            api_key_id: API key ID for attribution (None for JWT auth)
 
         Returns:
             Dictionary with template suggestions
@@ -85,17 +95,23 @@ class TemplateWizardService:
             },
         ]
 
-        # Call LLM service
+        # Call LLM service with usage tracking
         llm_request = ChatRequest(
             model=model_name,
             messages=messages,
             response_format={"type": "json_object"},
-            user_id="wizard",  # System user
-            api_key_id=0,
+            user_id=str(user_id) if user_id else "system",
+            api_key_id=api_key_id,
         )
 
         logger.info("Analyzing document with template wizard")
-        response = await llm_service.create_chat_completion(llm_request)
+        response = await llm_service.create_chat_completion(
+            llm_request,
+            db=db,
+            user_id=user_id,
+            api_key_id=api_key_id,
+            endpoint="extract/templates/wizard",
+        )
 
         # Parse response
         content = response.choices[0].message.content

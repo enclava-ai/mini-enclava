@@ -234,9 +234,18 @@ class LLMService:
         request: ChatRequest,
         db: Optional["AsyncSession"] = None,
         user_id: Optional[int] = None,
-        api_key_id: Optional[int] = None
+        api_key_id: Optional[int] = None,
+        endpoint: str = "/v1/chat/completions",
     ) -> ChatResponse:
-        """Create chat completion with security, resilience, and usage recording"""
+        """Create chat completion with security, resilience, and usage recording
+
+        Args:
+            request: Chat completion request
+            db: Database session for usage recording (required for tracking)
+            user_id: User ID for attribution
+            api_key_id: API key ID for attribution
+            endpoint: Endpoint identifier for usage tracking (e.g., "extract/process", "/v1/chat/completions")
+        """
         if not self._initialized:
             await self.initialize()
 
@@ -273,7 +282,7 @@ class LLMService:
                     provider_model=request.model,
                     input_tokens=0,
                     output_tokens=0,
-                    endpoint="/v1/chat/completions",
+                    endpoint=endpoint,
                     status="error",
                     error_type="provider_unavailable",
                     error_message=str(error),
@@ -314,7 +323,7 @@ class LLMService:
                     provider_model=request.model,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
-                    endpoint="/v1/chat/completions",
+                    endpoint=endpoint,
                     status="success",
                     latency_ms=latency_ms,
                     chatbot_id=request.chatbot_id,
@@ -356,7 +365,7 @@ class LLMService:
                     provider_model=request.model,
                     input_tokens=0,
                     output_tokens=0,
-                    endpoint="/v1/chat/completions",
+                    endpoint=endpoint,
                     status="error",
                     error_type=error_type,
                     error_message=str(e),
@@ -373,9 +382,18 @@ class LLMService:
         request: ChatRequest,
         db: Optional["AsyncSession"] = None,
         user_id: Optional[int] = None,
-        api_key_id: Optional[int] = None
+        api_key_id: Optional[int] = None,
+        endpoint: str = "/v1/chat/completions",
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Create streaming chat completion with usage tracking"""
+        """Create streaming chat completion with usage tracking
+
+        Args:
+            request: Chat completion request
+            db: Database session for usage recording (required for tracking)
+            user_id: User ID for attribution
+            api_key_id: API key ID for attribution
+            endpoint: Endpoint identifier for usage tracking
+        """
         if not self._initialized:
             await self.initialize()
 
@@ -413,7 +431,7 @@ class LLMService:
                 user_id=user_id,
                 api_key_id=api_key_id,
                 provider_id=provider_name,
-                endpoint="/v1/chat/completions",
+                endpoint=endpoint,
             )
 
         try:
@@ -488,9 +506,18 @@ class LLMService:
         request: EmbeddingRequest,
         db: Optional["AsyncSession"] = None,
         user_id: Optional[int] = None,
-        api_key_id: Optional[int] = None
+        api_key_id: Optional[int] = None,
+        endpoint: str = "/v1/embeddings",
     ) -> EmbeddingResponse:
-        """Create embeddings with security, resilience and usage recording"""
+        """Create embeddings with security, resilience and usage recording
+
+        Args:
+            request: Embedding request
+            db: Database session for usage recording (required for tracking)
+            user_id: User ID for attribution
+            api_key_id: API key ID for attribution
+            endpoint: Endpoint identifier for usage tracking
+        """
         if not self._initialized:
             await self.initialize()
 
@@ -519,7 +546,7 @@ class LLMService:
                     provider_model=request.model,
                     input_tokens=0,
                     output_tokens=0,
-                    endpoint="/v1/embeddings",
+                    endpoint=endpoint,
                     status="error",
                     error_type="provider_unavailable",
                     error_message=str(error),
@@ -558,7 +585,7 @@ class LLMService:
                     provider_model=request.model,
                     input_tokens=input_tokens,
                     output_tokens=0,  # Embeddings don't have output tokens
-                    endpoint="/v1/embeddings",
+                    endpoint=endpoint,
                     status="success",
                     latency_ms=latency_ms,
                     is_streaming=False,
@@ -589,7 +616,7 @@ class LLMService:
                     provider_model=request.model,
                     input_tokens=0,
                     output_tokens=0,
-                    endpoint="/v1/embeddings",
+                    endpoint=endpoint,
                     status="error",
                     error_type="provider_error",
                     error_message=str(e),

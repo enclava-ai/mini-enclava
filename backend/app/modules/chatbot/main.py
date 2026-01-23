@@ -565,7 +565,8 @@ class ChatbotModule(BaseModule):
             else:
                 # Use existing non-tool path
                 response_content, sources, provider, input_tokens, output_tokens = await self._generate_response(
-                    request.message, messages, chatbot_config, request.context, db
+                    request.message, messages, chatbot_config, request.context, db,
+                    user_id=user_id, chatbot_id=request.chatbot_id
                 )
 
                 # Create assistant message
@@ -696,8 +697,19 @@ class ChatbotModule(BaseModule):
         config: ChatbotConfig,
         context: Optional[Dict] = None,
         db=None,
+        user_id: Optional[str] = None,
+        chatbot_id: Optional[str] = None,
     ) -> tuple[str, Optional[List], Optional[str], int, int]:
         """Generate response using LLM with optional RAG.
+
+        Args:
+            message: User message
+            db_messages: Conversation history
+            config: Chatbot configuration
+            context: Optional context dict
+            db: Database session for usage tracking
+            user_id: User ID for usage attribution
+            chatbot_id: Chatbot ID for tracking
 
         Returns:
             tuple: (response_content, sources, provider, input_tokens, output_tokens)
@@ -930,12 +942,19 @@ class ChatbotModule(BaseModule):
                 messages=llm_messages,
                 temperature=config.temperature,
                 max_tokens=config.max_tokens,
-                user_id="chatbot_user",
+                user_id=user_id or "chatbot_user",
                 api_key_id=None,  # None = Chatbot internal usage (no API key)
+                chatbot_id=chatbot_id,
             )
 
-            # Make request to LLM service
-            llm_response = await llm_service.create_chat_completion(llm_request)
+            # Make request to LLM service with usage tracking
+            llm_response = await llm_service.create_chat_completion(
+                llm_request,
+                db=db,
+                user_id=int(user_id) if user_id and user_id.isdigit() else None,
+                api_key_id=None,  # JWT auth, no API key
+                endpoint="chatbot/chat",
+            )
 
             # Extract response content
             if llm_response.choices:
@@ -1288,7 +1307,8 @@ class ChatbotModule(BaseModule):
                 ]
 
                 response_content, sources, provider, input_tokens, output_tokens = await self._generate_response(
-                    message, temp_messages, config, None, db
+                    message, temp_messages, config, None, db,
+                    user_id=user_id, chatbot_id=chatbot_config.get("id")
                 )
 
                 return {

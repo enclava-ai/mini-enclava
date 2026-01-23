@@ -470,8 +470,14 @@ Please improve this prompt to make it more effective for a {request.chatbot_type
             api_key_id=None,  # None = Playground/internal usage (JWT auth)
         )
 
-        # Make the AI call
-        response = await llm_service.create_chat_completion(chat_request)
+        # Make the AI call with usage tracking
+        response = await llm_service.create_chat_completion(
+            chat_request,
+            db=db,
+            user_id=user_id,
+            api_key_id=None,  # JWT auth, no API key
+            endpoint="prompt-templates/improve",
+        )
 
         # Extract the improved prompt from the response
         improved_prompt = response.choices[0].message.content.strip()

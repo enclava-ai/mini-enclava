@@ -31,10 +31,7 @@ from app.models.extract_result import ExtractResult
 from app.models.extract_settings import ExtractSettings
 from app.models.user import User
 from app.services.api_key_auth import APIKeyAuthService
-from app.services.async_budget_enforcement import (
-    async_check_budget_for_request,
-    async_record_request_usage,
-)
+from app.services.async_budget_enforcement import async_check_budget_for_request
 from app.services.llm.models import ChatRequest
 from app.services.llm.service import llm_service
 
@@ -153,15 +150,22 @@ class ExtractService:
 
             # 9. Call LLM service directly (SAME AS CHATBOTS/AGENTS)
             # This ensures the call goes through the same resilience patterns
+            # and unified usage tracking via UsageRecordingService
             llm_request = ChatRequest(
                 model=model_name,
                 messages=messages,
                 response_format={"type": "json_object"},
                 user_id=str(current_user["id"]),
-                api_key_id=api_key.id if api_key else 0,
+                api_key_id=api_key.id if api_key else None,
             )
 
-            response = await llm_service.create_chat_completion(llm_request)
+            response = await llm_service.create_chat_completion(
+                llm_request,
+                db=db,
+                user_id=int(current_user["id"]),
+                api_key_id=api_key.id if api_key else None,
+                endpoint="extract/process",
+            )
 
             # 10. Parse and validate response
             parsed_data = self._parse_response(response.choices[0].message.content)
@@ -174,18 +178,10 @@ class ExtractService:
                 response.usage.completion_tokens,
             )
 
-            # 12. Record actual usage
-            if api_key:
-                await async_record_request_usage(
-                    db,
-                    api_key,
-                    model_name,
-                    response.usage.prompt_tokens,
-                    response.usage.completion_tokens,
-                    "extract/process",
-                )
+            # Usage is now recorded by LLMService via UsageRecordingService
+            # No need for manual async_record_request_usage call
 
-            # 13. Update API key stats
+            # 12. Update API key stats
             if api_key:
                 auth_service = APIKeyAuthService(db)
                 await auth_service.update_usage_stats(
@@ -194,7 +190,7 @@ class ExtractService:
                     actual_cost_cents,
                 )
 
-            # 14. Set analytics data for middleware
+            # 13. Set analytics data for middleware
             set_analytics_data(
                 model=model_name,
                 request_tokens=response.usage.prompt_tokens,

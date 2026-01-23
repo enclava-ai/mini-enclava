@@ -370,10 +370,16 @@ async def template_wizard(
     if not images:
         raise HTTPException(status_code=400, detail="No valid images found in file")
 
-    # Analyze with wizard
+    # Get user_id for tracking
+    user_id = current_user.get("id") if isinstance(current_user, dict) else current_user.id
+
+    # Analyze with wizard (with usage tracking)
     template_data = await wizard_service.analyze_document(
         images[0],
-        model_name=config.get("vision_model", "gpt-4o")
+        model_name=config.get("vision_model", "gpt-4o"),
+        db=db,
+        user_id=user_id,
+        api_key_id=None,  # JWT auth, no API key
     )
 
     # Validate template

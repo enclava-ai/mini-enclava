@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enclava is a confidential AI platform providing OpenAI-compatible chatbots and API endpoints with knowledge base access (RAG). It uses privatemode.ai for privacy-protected LLM inference via confidential computing (TEE).
 
+## Warnings and rules
+- Do not try to change to timestamps with timezones 
+
 ## Development Commands
 
 ### Start Development Environment

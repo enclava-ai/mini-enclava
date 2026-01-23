@@ -133,9 +133,17 @@ class ToolCallingService:
 
         tool_call_count = 0
 
+        user_id_int = self._get_user_id(user)
+
         while tool_call_count < max_tool_calls:
-            # Make LLM request
-            llm_response = await llm_service.create_chat_completion(request)
+            # Make LLM request with usage tracking
+            llm_response = await llm_service.create_chat_completion(
+                request,
+                db=self.db,
+                user_id=user_id_int,
+                api_key_id=None,  # Tool calling is internal, no API key
+                endpoint="tools/chat/completions",
+            )
 
             # Check if the response contains tool calls
             assistant_message = llm_response.choices[0].message
@@ -177,7 +185,13 @@ class ToolCallingService:
         # If we reach max tool calls, make final request without tools
         request.tools = None
         request.tool_choice = None
-        final_response = await llm_service.create_chat_completion(request)
+        final_response = await llm_service.create_chat_completion(
+            request,
+            db=self.db,
+            user_id=user_id_int,
+            api_key_id=None,
+            endpoint="tools/chat/completions",
+        )
 
         return final_response
 
@@ -195,8 +209,16 @@ class ToolCallingService:
         if available_tools and not request.tools:
             request.tools = await self._convert_tools_to_openai_format(available_tools)
 
-        # Stream the response
-        async for chunk in llm_service.create_chat_completion_stream(request):
+        user_id_int = self._get_user_id(user)
+
+        # Stream the response with usage tracking
+        async for chunk in llm_service.create_chat_completion_stream(
+            request,
+            db=self.db,
+            user_id=user_id_int,
+            api_key_id=None,  # Tool calling is internal, no API key
+            endpoint="tools/chat/completions",
+        ):
             yield chunk
 
     async def execute_tool_by_name(

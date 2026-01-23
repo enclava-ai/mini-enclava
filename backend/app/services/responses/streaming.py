@@ -432,8 +432,15 @@ async def stream_response_events_with_tools(
             current_text = []
             current_tool_calls = {}
 
-            # Stream LLM response
-            llm_stream = llm_service.create_chat_completion_stream(chat_request)
+            # Stream LLM response with usage tracking
+            user_id = tool_calling_service._get_user_id(user)
+            llm_stream = llm_service.create_chat_completion_stream(
+                chat_request,
+                db=tool_calling_service.db,
+                user_id=user_id,
+                api_key_id=None,  # Responses API uses JWT auth
+                endpoint="responses/stream",
+            )
 
             async for chunk in llm_stream:
                 delta = chunk.get("choices", [{}])[0].get("delta", {})

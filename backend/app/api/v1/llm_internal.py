@@ -3,9 +3,7 @@ Internal LLM API endpoints - for frontend use with JWT authentication
 """
 
 import logging
-import time
 from typing import Dict, Any, List, Optional
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -22,7 +20,6 @@ from app.services.llm.exceptions import (
     ValidationError,
 )
 from app.api.v1.llm import get_cached_models  # Reuse the caching logic
-from app.services.usage_recording import UsageRecordingService
 
 logger = logging.getLogger(__name__)
 
@@ -133,14 +130,10 @@ async def create_chat_completion(
     """
     Create chat completion for authenticated frontend users.
     This endpoint is for playground and internal use only, using JWT authentication.
-    """
-    start_time = time.time()
-    request_id = uuid4()
-    user_id = current_user.get("id", current_user.get("sub"))
-    usage_service = UsageRecordingService(db)
 
-    # Determine which provider will handle this model BEFORE making the request
-    expected_provider = await llm_service.get_provider_for_model(request.model)
+    Usage tracking is handled by LLMService internally.
+    """
+    user_id = current_user.get("id", current_user.get("sub"))
 
     try:
         # Convert request to LLM service format
@@ -165,30 +158,18 @@ async def create_chat_completion(
         )
 
         # Process the request through the LLM service
-        response = await llm_service.create_chat_completion(chat_request)
+        # Usage tracking is handled internally by LLMService
+        response = await llm_service.create_chat_completion(
+            chat_request,
+            db=db,
+            user_id=user_id,
+            api_key_id=None,  # JWT auth, no API key
+            endpoint="/api-internal/v1/llm/chat/completions",
+        )
 
-        # Extract usage data
+        # Extract usage data for response formatting
         input_tokens = response.usage.prompt_tokens if response.usage else 0
         output_tokens = response.usage.completion_tokens if response.usage else 0
-        latency_ms = int((time.time() - start_time) * 1000)
-
-        # Record usage to usage_records table (source of truth for billing)
-        await usage_service.record_request(
-            request_id=request_id,
-            user_id=user_id,
-            api_key_id=None,  # None with no chatbot_id = Playground (JWT auth)
-            provider_id=getattr(response, "provider", None) or expected_provider,
-            provider_model=request.model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            endpoint="/api-internal/v1/llm/chat/completions",
-            method="POST",
-            is_streaming=request.stream or False,
-            message_count=len(request.messages),
-            latency_ms=latency_ms,
-            status="success",
-        )
-        await db.commit()
 
         # Format the response to match OpenAI's structure
         formatted_response = {
@@ -217,66 +198,21 @@ async def create_chat_completion(
         return formatted_response
 
     except ValidationError as e:
+        # Error recording is handled by LLMService internally
         logger.error(f"Validation error in chat completion: {e}")
-        # Record error
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=user_id,
-            api_key_id=None,  # None = Playground/internal (JWT auth)
-            provider_id=expected_provider,
-            model=request.model,
-            endpoint="/api-internal/v1/llm/chat/completions",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            message_count=len(request.messages),
-            is_streaming=request.stream or False,
-        )
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid request: {str(e)}"
         )
     except LLMError as e:
+        # Error recording is handled by LLMService internally
         logger.error(f"LLM service error: {e}")
-        # Record error
-        latency_ms = int((time.time() - start_time) * 1000)
-        await usage_service.record_error(
-            user_id=user_id,
-            api_key_id=None,  # None = Playground/internal (JWT auth)
-            provider_id=expected_provider,
-            model=request.model,
-            endpoint="/api-internal/v1/llm/chat/completions",
-            error=e,
-            latency_ms=latency_ms,
-            request_id=request_id,
-            message_count=len(request.messages),
-            is_streaming=request.stream or False,
-        )
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"LLM service error: {str(e)}",
         )
     except Exception as e:
+        # Error recording is handled by LLMService internally
         logger.error(f"Unexpected error in chat completion: {e}")
-        # Record error
-        latency_ms = int((time.time() - start_time) * 1000)
-        try:
-            await usage_service.record_error(
-                user_id=user_id,
-                api_key_id=None,  # None = Playground/internal (JWT auth)
-                provider_id=expected_provider,
-                model=request.model,
-                endpoint="/api-internal/v1/llm/chat/completions",
-                error=e,
-                latency_ms=latency_ms,
-                request_id=request_id,
-                message_count=len(request.messages),
-                is_streaming=request.stream or False,
-            )
-            await db.commit()
-        except Exception as record_error:
-            logger.error(f"Failed to record usage error: {record_error}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process chat completion",

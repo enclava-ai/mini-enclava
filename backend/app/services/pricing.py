@@ -15,7 +15,7 @@ Phase 2 Update: Added database pricing lookup with automatic fallback to static 
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict
 
 import re
@@ -24,6 +24,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.db.database import utc_now
 
 logger = get_logger(__name__)
 
@@ -133,7 +134,8 @@ class PricingService:
         self._static_pricing = STATIC_PRICING
         self._default_pricing = DEFAULT_PRICING
         # Timestamp for static pricing (service start time)
-        self._static_effective_from = datetime.now(timezone.utc)
+        # Using naive datetime for PostgreSQL TIMESTAMP WITHOUT TIME ZONE compatibility
+        self._static_effective_from = utc_now()
 
     async def get_pricing(
         self,
