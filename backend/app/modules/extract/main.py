@@ -1,4 +1,4 @@
-"""Extract module main implementation."""
+"""Extract main implementation."""
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -29,7 +29,7 @@ class ExtractModule(BaseModule):
 
     async def initialize(self):
         """
-        Initialize Extract module on application startup.
+        Initialize Extract on application startup.
 
         - Initializes LLM service for inference
         - Seeds default templates if not present
@@ -44,7 +44,7 @@ class ExtractModule(BaseModule):
         async with async_session_factory() as db:
             await TemplateManager.seed_defaults(db)
 
-        logger.info("Extract module initialized")
+        logger.info("Extract initialized")
         logger.info(f"LLM service available: {llm_service._initialized}")
         log_module_event("extract", "initialized", {"success": True})
 
@@ -55,9 +55,7 @@ class ExtractModule(BaseModule):
     def get_required_permissions(self) -> List[Permission]:
         """Return permissions required by Extract."""
         return [
-            Permission("extract", "process", "Process documents with Extract"),
-            Permission("extract", "jobs", "View Extract job history"),
-            Permission("extract", "templates", "Manage Extract templates"),
+            Permission("extract", "use", "Use Extract"),
         ]
 
     async def process_request(
@@ -70,7 +68,7 @@ class ExtractModule(BaseModule):
         This is implemented to satisfy the BaseModule abstract method requirement.
         """
         return {
-            "error": "Extract module uses REST API endpoints. "
+            "error": "Extract uses REST API endpoints. "
             "Use /api/v1/extract/* endpoints instead."
         }
 
@@ -81,5 +79,5 @@ extract_module = ExtractModule()
 
 # Module factory function for dependency injection
 def create_module(config: Optional[Dict[str, Any]] = None) -> ExtractModule:
-    """Create Extract module instance."""
+    """Create Extract instance."""
     return ExtractModule(config=config)

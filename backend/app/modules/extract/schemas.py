@@ -1,4 +1,4 @@
-"""Pydantic schemas for Extract module."""
+"""Pydantic schemas for Extract."""
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional

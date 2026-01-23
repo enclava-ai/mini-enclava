@@ -1,1 +1,1 @@
-"""Tests for Extract module."""
+"""Tests for Extract."""

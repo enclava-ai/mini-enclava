@@ -1,4 +1,4 @@
-"""Extract module for document data extraction using vision language models."""
+"""Extract for document data extraction using vision language models."""
 
 from .main import ExtractModule
 

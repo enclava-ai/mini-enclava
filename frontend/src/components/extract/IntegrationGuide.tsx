@@ -64,11 +64,9 @@ export function IntegrationGuide() {
           </Alert>
 
           <div>
-            <h3 className="font-semibold mb-2">Required Scopes</h3>
+            <h3 className="font-semibold mb-2">Required Scope</h3>
             <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-              <li><code className="bg-muted px-2 py-0.5 rounded">extract.process</code> - Process documents</li>
-              <li><code className="bg-muted px-2 py-0.5 rounded">extract.jobs</code> - View job history</li>
-              <li><code className="bg-muted px-2 py-0.5 rounded">extract.templates</code> - List templates</li>
+              <li><code className="bg-muted px-2 py-0.5 rounded">extract</code> - Access to all Extract operations</li>
             </ul>
           </div>
         </CardContent>

@@ -48,9 +48,7 @@ def test_create_extract_key():
         template_ids=["detailed_invoice"],
     )
     assert key.permissions == {"extract": True}
-    assert "extract.process" in key.scopes
-    assert "extract.jobs" in key.scopes
-    assert "extract.templates" in key.scopes
+    assert "extract" in key.scopes
     assert key.allowed_extract_templates == ["detailed_invoice"]
     assert "/api/v1/extract/process" in key.allowed_endpoints
     assert "extract" in key.tags
@@ -199,22 +197,22 @@ def test_to_dict_includes_extract_templates():
 # @pytest.mark.asyncio
 # @pytest.mark.integration
 # async def test_extract_list_jobs_scope_check(client, db, test_user):
-#     """Test jobs endpoint requires extract.jobs scope"""
+#     """Test jobs endpoint requires extract scope"""
 #     from app.core.security import generate_api_key, get_api_key_hash
 #
-#     # Create API key without extract.jobs scope
+#     # Create API key without extract scope
 #     raw_api_key = generate_api_key()
 #     key_hash = get_api_key_hash(raw_api_key)
 #     key_prefix = raw_api_key[:8]
 #
 #     api_key = APIKey(
-#         name="Test Key - No Jobs Scope",
+#         name="Test Key - No Extract Scope",
 #         key_hash=key_hash,
 #         key_prefix=key_prefix,
 #         user_id=test_user.id,
 #         is_active=True,
-#         permissions={"extract": True},
-#         scopes=["extract.process"],  # Missing extract.jobs
+#         permissions={},
+#         scopes=["other_scope"],  # Missing extract scope
 #     )
 #     db.add(api_key)
 #     await db.commit()
@@ -227,28 +225,28 @@ def test_to_dict_includes_extract_templates():
 #
 #     # Should get 403 error
 #     assert response.status_code == 403
-#     assert "extract.jobs" in response.json()["detail"]
+#     assert "extract" in response.json()["detail"]
 
 
 # @pytest.mark.asyncio
 # @pytest.mark.integration
 # async def test_extract_templates_scope_check(client, db, test_user):
-#     """Test templates endpoint requires extract.templates scope"""
+#     """Test templates endpoint requires extract scope"""
 #     from app.core.security import generate_api_key, get_api_key_hash
 #
-#     # Create API key without extract.templates scope
+#     # Create API key without extract scope
 #     raw_api_key = generate_api_key()
 #     key_hash = get_api_key_hash(raw_api_key)
 #     key_prefix = raw_api_key[:8]
 #
 #     api_key = APIKey(
-#         name="Test Key - No Templates Scope",
+#         name="Test Key - No Extract Scope",
 #         key_hash=key_hash,
 #         key_prefix=key_prefix,
 #         user_id=test_user.id,
 #         is_active=True,
-#         permissions={"extract": True},
-#         scopes=["extract.process", "extract.jobs"],  # Missing extract.templates
+#         permissions={},
+#         scopes=["other_scope"],  # Missing extract scope
 #     )
 #     db.add(api_key)
 #     await db.commit()
@@ -261,7 +259,7 @@ def test_to_dict_includes_extract_templates():
 #
 #     # Should get 403 error
 #     assert response.status_code == 403
-#     assert "extract.templates" in response.json()["detail"]
+#     assert "extract" in response.json()["detail"]
 
 
 # @pytest.mark.asyncio

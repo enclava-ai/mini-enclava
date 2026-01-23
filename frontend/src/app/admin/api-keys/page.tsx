@@ -108,9 +108,7 @@ const PERMISSION_OPTIONS = [
   { value: "chat.completions", label: "LLM Chat Completions" },
   { value: "embeddings.create", label: "LLM Embeddings" },
   { value: "models.list", label: "List Models" },
-  { value: "extract.process", label: "Extract - Process Documents" },
-  { value: "extract.jobs", label: "Extract - View Jobs" },
-  { value: "extract.templates", label: "Extract - List Templates" },
+  { value: "extract", label: "Extract" },
 ];
 
 function ApiKeysContent() {
@@ -847,18 +845,6 @@ function ApiKeysContent() {
                     )}
                   </div>
                 </div>
-
-                <div className="space-y-2 mb-4">
-                  <span className="text-sm font-medium">Scopes:</span>
-                  <div className="flex flex-wrap gap-1">
-                    {apiKey.scopes.map((scope) => (
-                      <Badge key={scope} variant="outline" className="text-xs">
-                        {scope}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
 
                 <div className="flex items-center space-x-2">
                   <Button 

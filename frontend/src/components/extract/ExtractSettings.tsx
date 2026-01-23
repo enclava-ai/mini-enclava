@@ -83,7 +83,7 @@ export function ExtractSettings() {
       setSettings(updated)
       toast({
         title: "Settings Saved",
-        description: "Extract module settings have been updated successfully.",
+        description: "Extract settings have been updated successfully.",
       })
     } catch (error) {
       toast({
@@ -110,10 +110,10 @@ export function ExtractSettings() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            <CardTitle>Extract Module Settings</CardTitle>
+            <CardTitle>Extract Settings</CardTitle>
           </div>
           <CardDescription>
-            Configure default settings for the Extract module. These can be overridden per-template.
+            Configure default settings for Extract. These can be overridden per-template.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

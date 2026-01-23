@@ -394,7 +394,7 @@ export const extractApi = {
   },
 
   /**
-   * Health check for Extract module
+   * Health check for Extract
    */
   health() {
     return apiClient.get('/api/v1/extract/health')

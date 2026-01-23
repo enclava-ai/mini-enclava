@@ -464,7 +464,7 @@ class APIKey(Base):
             user_id=user_id,
             is_active=True,
             permissions={"extract": True},
-            scopes=["extract.process", "extract.jobs", "extract.templates"],
+            scopes=["extract"],  # Single scope for all Extract operations
             # Rate limits will use model defaults (60/min, 3600/hour, 86400/day)
             allowed_models=[],  # Will use template's configured model
             allowed_endpoints=[

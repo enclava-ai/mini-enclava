@@ -66,7 +66,7 @@ async def process_document(
     if not specified. Context can include variables like company_name, currency, etc.
 
     Authentication: JWT (frontend) or API key (external)
-    Required scope (API key): extract.process
+    Required scope (API key): extract
     """
     current_user, api_key = auth
 
@@ -92,10 +92,10 @@ async def process_document(
     # API key permission checks
     if api_key:
         # Check scope
-        if not api_key.has_scope("extract.process"):
+        if not api_key.has_scope("extract"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Scope 'extract.process' required"
+                detail="Scope 'extract' required"
             )
 
         # Check template access
@@ -140,15 +140,15 @@ async def list_jobs(
     List Extract jobs for the current user.
 
     Authentication: JWT (frontend) or API key (external)
-    Required scope (API key): extract.jobs
+    Required scope (API key): extract
     """
     current_user, api_key = auth
 
     # API key scope check
-    if api_key and not api_key.has_scope("extract.jobs"):
+    if api_key and not api_key.has_scope("extract"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Scope 'extract.jobs' required"
+            detail="Scope 'extract' required"
         )
 
     return await extract_service.list_jobs(db, current_user["id"], limit, offset, status)
@@ -164,15 +164,15 @@ async def get_job(
     Get job details and extraction result.
 
     Authentication: JWT (frontend) or API key (external)
-    Required scope (API key): extract.jobs
+    Required scope (API key): extract
     """
     current_user, api_key = auth
 
     # API key scope check
-    if api_key and not api_key.has_scope("extract.jobs"):
+    if api_key and not api_key.has_scope("extract"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Scope 'extract.jobs' required"
+            detail="Scope 'extract' required"
         )
 
     return await extract_service.get_job(db, str(job_id), current_user["id"])
@@ -190,15 +190,15 @@ async def list_templates(
     List all extraction templates.
 
     Authentication: JWT (frontend) or API key (external)
-    Required scope (API key): extract.templates
+    Required scope (API key): extract
     """
     current_user, api_key = auth
 
     # API key scope check
-    if api_key and not api_key.has_scope("extract.templates"):
+    if api_key and not api_key.has_scope("extract"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Scope 'extract.templates' required"
+            detail="Scope 'extract' required"
         )
 
     manager = TemplateManager(db)
@@ -374,7 +374,7 @@ async def get_settings(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Get Extract module settings.
+    Get Extract settings.
 
     JWT authentication only (not available via API key).
     Auto-populates default_model with first available vision model if not set.
@@ -427,7 +427,7 @@ async def update_settings(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Update Extract module settings.
+    Update Extract settings.
 
     JWT authentication only (not available via API key).
     """

@@ -1,8 +1,8 @@
-"""Custom exceptions for Extract module."""
+"""Custom exceptions for Extract."""
 
 
 class ExtractError(Exception):
-    """Base exception for Extract module."""
+    """Base exception for Extract."""
 
     pass
 

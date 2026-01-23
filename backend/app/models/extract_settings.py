@@ -1,4 +1,4 @@
-"""Extract module settings model."""
+"""Extract settings model."""
 
 from datetime import datetime
 
@@ -10,9 +10,9 @@ from app.db.database import Base
 
 class ExtractSettings(Base):
     """
-    Global settings for Extract module.
+    Global settings for Extract.
 
-    Stores module-wide configuration like default model.
+    Stores configuration like default model.
     Single-row table (id=1).
     """
 
