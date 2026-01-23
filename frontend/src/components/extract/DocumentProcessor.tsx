@@ -1,16 +1,22 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Upload, FileText, X, AlertCircle, CheckCircle2, Loader2, DollarSign, Clock } from "lucide-react"
+import { Upload, AlertCircle, Loader2, DollarSign, Clock } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { extractApi } from "@/lib/api-client"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  type JsonValue,
+  getErrorMessage,
+  formatCost,
+  formatValue,
+  MAX_FILE_SIZE,
+} from "@/lib/extract-utils"
 
 interface Template {
   id: string
@@ -20,7 +26,7 @@ interface Template {
 interface ProcessResult {
   success: boolean
   job_id: string
-  data: Record<string, any>
+  data: Record<string, JsonValue>
   validation_errors: string[]
   validation_warnings: string[]
   processing_time_ms: number
@@ -39,11 +45,7 @@ export function DocumentProcessor() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
-  useEffect(() => {
-    loadTemplates()
-  }, [])
-
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     try {
       const response = await extractApi.listTemplates()
       setTemplates(response.templates || [])
@@ -57,7 +59,11 @@ export function DocumentProcessor() {
         variant: "destructive",
       })
     }
-  }
+  }, [toast, selectedTemplate])
+
+  useEffect(() => {
+    loadTemplates()
+  }, [loadTemplates])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
@@ -70,26 +76,46 @@ export function DocumentProcessor() {
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return
-    setFile(files[0])
+
+    const selectedFile = files[0]
+
+    // Validate file size on client side
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      toast({
+        title: "File Too Large",
+        description: "Maximum file size is 10MB",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setFile(selectedFile)
     setResult(null)
     setError(null)
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(true)
-  }
+  }, [])
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-  }
+  }, [])
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
     handleFileSelect(e.dataTransfer.files)
-  }
+  }, [])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      fileInputRef.current?.click()
+    }
+  }, [])
 
   const processDocument = async () => {
     if (!file) {
@@ -117,8 +143,8 @@ export function DocumentProcessor() {
           variant: "destructive",
         })
       }
-    } catch (err: any) {
-      const errorMessage = err?.details?.detail || err?.message || "Processing failed"
+    } catch (err: unknown) {
+      const errorMessage = getErrorMessage(err, "Processing failed")
       setError(errorMessage)
       toast({
         title: "Error",
@@ -130,26 +156,14 @@ export function DocumentProcessor() {
     }
   }
 
-  const clearForm = () => {
+  const clearForm = useCallback(() => {
     setFile(null)
     setResult(null)
     setError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
-  }
-
-  const formatValue = (value: any): string => {
-    if (value === null || value === undefined) return "N/A"
-    if (typeof value === "object") {
-      return JSON.stringify(value, null, 2)
-    }
-    return String(value)
-  }
-
-  const formatCost = (cents: number): string => {
-    return `$${(cents / 100).toFixed(4)}`
-  }
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -182,15 +196,19 @@ export function DocumentProcessor() {
           <div className="space-y-2">
             <Label>Select Image or PDF</Label>
             <div
+              role="button"
+              tabIndex={0}
+              aria-label="Drop file here or click to browse. Supported formats: JPG, PNG, PDF. Maximum size: 10MB"
               className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                 dragOver
                   ? 'border-primary bg-primary/5'
                   : 'border-gray-300 hover:border-gray-400'
-              } cursor-pointer`}
+              } cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
+              onKeyDown={handleKeyDown}
             >
               <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
               <div className="space-y-2">

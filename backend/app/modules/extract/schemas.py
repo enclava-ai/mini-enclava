@@ -1,10 +1,64 @@
 """Pydantic schemas for Extract."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+# Allowed primitive types for context values
+ContextValue = Optional[Union[str, int, float, bool]]
+
+
+class ExtractContext(BaseModel):
+    """
+    Schema for validating context passed to template processing.
+
+    Context allows arbitrary string keys but validates that all values
+    are primitives (str, int, float, bool, or None). Nested objects
+    and arrays are rejected to prevent unexpected behavior during
+    template placeholder substitution.
+
+    Example valid context:
+        {"company_name": "Acme Corp", "currency": "USD", "vat_rate": 0.21}
+
+    Example invalid context:
+        {"items": [{"name": "item1"}]}  # Arrays/nested objects not allowed
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_context_values(cls, values: Any) -> Any:
+        """Validate that all values are primitives (no nested objects/arrays)."""
+        if not isinstance(values, dict):
+            raise ValueError("Context must be a JSON object")
+
+        invalid_keys = []
+        for key, value in values.items():
+            if not isinstance(key, str):
+                raise ValueError(f"Context keys must be strings, got {type(key).__name__} for key: {key}")
+
+            # Check for nested objects and arrays
+            if isinstance(value, (dict, list)):
+                invalid_keys.append(key)
+            # Allow primitives: str, int, float, bool, None
+            elif value is not None and not isinstance(value, (str, int, float, bool)):
+                invalid_keys.append(key)
+
+        if invalid_keys:
+            raise ValueError(
+                f"Context values must be primitives (string, number, boolean, or null). "
+                f"Nested objects or arrays found in keys: {', '.join(invalid_keys)}"
+            )
+
+        return values
+
+    def to_dict(self) -> Dict[str, ContextValue]:
+        """Convert to plain dictionary for use in template processing."""
+        return dict(self)
 
 
 # Template schemas

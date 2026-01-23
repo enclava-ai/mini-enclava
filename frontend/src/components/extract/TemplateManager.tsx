@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,14 @@ import { Plus, Edit, Trash2, RefreshCw, FileText, Wand2, Upload, Loader2 } from 
 import { useToast } from "@/hooks/use-toast"
 import { extractApi } from "@/lib/api-client"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  type JsonValue,
+  type WizardResult,
+  type WizardField,
+  type ModelResponse,
+  getErrorMessage,
+  MAX_FILE_SIZE,
+} from "@/lib/extract-utils"
 
 interface Template {
   id: string
@@ -22,7 +30,7 @@ interface Template {
   user_prompt: string
   is_default: boolean
   is_active: boolean
-  output_schema?: any
+  output_schema?: Record<string, JsonValue>
 }
 
 interface TemplateFormData {
@@ -51,7 +59,7 @@ export function TemplateManager() {
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [wizardAnalyzing, setWizardAnalyzing] = useState(false)
-  const [wizardResult, setWizardResult] = useState<any>(null)
+  const [wizardResult, setWizardResult] = useState<WizardResult | null>(null)
   const wizardFileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
@@ -62,12 +70,7 @@ export function TemplateManager() {
     user_prompt: "",
   })
 
-  useEffect(() => {
-    loadTemplates()
-    loadModels()
-  }, [])
-
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     setLoading(true)
     try {
       const response = await extractApi.listTemplates()
@@ -81,21 +84,21 @@ export function TemplateManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
-  const loadModels = async () => {
+  const loadModels = useCallback(async () => {
     setLoadingModels(true)
     try {
       const response = await extractApi.getModels()
-      const models = response.data || []
+      const models: ModelResponse[] = response.data || []
 
       // Filter for vision-capable models only
       const visionModels = models
-        .filter((model: any) => model.capabilities?.includes('vision'))
-        .map((model: any) => ({
+        .filter((model) => model.capabilities?.includes('vision'))
+        .map((model) => ({
           id: model.id,
           name: model.name || model.id,
-          provider: model.provider || model.owned_by,
+          provider: model.provider || model.owned_by || 'unknown',
           capabilities: model.capabilities || [],
         }))
 
@@ -106,7 +109,6 @@ export function TemplateManager() {
         setWizardModel(visionModels[0].id)
       }
     } catch (error) {
-      console.error('Failed to load models:', error)
       toast({
         title: "Warning",
         description: "Failed to load available models. Using defaults.",
@@ -115,7 +117,12 @@ export function TemplateManager() {
     } finally {
       setLoadingModels(false)
     }
-  }
+  }, [toast, wizardModel])
+
+  useEffect(() => {
+    loadTemplates()
+    loadModels()
+  }, [loadTemplates, loadModels])
 
   const handleCreateTemplate = async () => {
     if (!formData.id || !formData.system_prompt || !formData.user_prompt) {
@@ -136,10 +143,10 @@ export function TemplateManager() {
       setIsCreateDialogOpen(false)
       resetForm()
       loadTemplates()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Error",
-        description: err?.details?.detail || "Failed to create template",
+        description: getErrorMessage(err, "Failed to create template"),
         variant: "destructive",
       })
     }
@@ -171,10 +178,10 @@ export function TemplateManager() {
       setEditingTemplate(null)
       resetForm()
       loadTemplates()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Error",
-        description: err?.details?.detail || "Failed to update template",
+        description: getErrorMessage(err, "Failed to update template"),
         variant: "destructive",
       })
     }
@@ -188,10 +195,10 @@ export function TemplateManager() {
         description: "Template deleted successfully",
       })
       loadTemplates()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Error",
-        description: err?.details?.detail || "Failed to delete template",
+        description: getErrorMessage(err, "Failed to delete template"),
         variant: "destructive",
       })
     }
@@ -242,6 +249,19 @@ export function TemplateManager() {
   const handleWizardFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
     if (selectedFile) {
+      // Validate file size on client side
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        toast({
+          title: "File Too Large",
+          description: "Maximum file size is 10MB",
+          variant: "destructive",
+        })
+        // Clear the input
+        if (wizardFileInputRef.current) {
+          wizardFileInputRef.current.value = ""
+        }
+        return
+      }
       setWizardFile(selectedFile)
     }
   }
@@ -275,10 +295,10 @@ export function TemplateManager() {
         title: "Analysis Complete",
         description: `Detected ${result.analysis?.document_type || 'document'}. Review and save the template.`,
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Error",
-        description: err?.details?.detail || "Failed to analyze document",
+        description: getErrorMessage(err, "Failed to analyze document"),
         variant: "destructive",
       })
     } finally {
@@ -305,10 +325,10 @@ export function TemplateManager() {
       setIsWizardDialogOpen(false)
       resetWizard()
       loadTemplates()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Error",
-        description: err?.details?.detail || "Failed to create template",
+        description: getErrorMessage(err, "Failed to create template"),
         variant: "destructive",
       })
     }
@@ -332,6 +352,13 @@ export function TemplateManager() {
     resetWizard()
     setIsWizardDialogOpen(true)
   }
+
+  const handleWizardFileKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      wizardFileInputRef.current?.click()
+    }
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -591,7 +618,14 @@ export function TemplateManager() {
 
               <div className="space-y-2">
                 <Label htmlFor="wizard-file">Sample Document</Label>
-                <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload a sample document. Supported formats: PDF, JPG, PNG. Maximum size: 10MB"
+                  className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 hover:border-gray-400"
+                  onClick={() => wizardFileInputRef.current?.click()}
+                  onKeyDown={handleWizardFileKeyDown}
+                >
                   <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                   <div className="space-y-2">
                     <p className="text-lg font-medium">
@@ -610,7 +644,10 @@ export function TemplateManager() {
                   />
                   <Button
                     variant="outline"
-                    onClick={() => wizardFileInputRef.current?.click()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      wizardFileInputRef.current?.click()
+                    }}
                     className="mt-4"
                   >
                     Select File
@@ -726,7 +763,7 @@ export function TemplateManager() {
                     View Detected Fields ({wizardResult.analysis.fields.length})
                   </summary>
                   <div className="mt-2 space-y-1 text-xs">
-                    {wizardResult.analysis.fields.map((field: any, idx: number) => (
+                    {wizardResult.analysis.fields.map((field: WizardField, idx: number) => (
                       <div key={idx} className="p-2 bg-muted rounded">
                         <span className="font-semibold">{field.name}</span> ({field.type})
                         {field.description && ` - ${field.description}`}

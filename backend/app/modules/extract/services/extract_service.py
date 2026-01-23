@@ -15,12 +15,14 @@ import logging
 import time
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.database import utc_now
 from app.middleware.analytics import set_analytics_data
 from app.services.cost_calculator import CostCalculator
 from app.models.api_key import APIKey
@@ -65,7 +67,7 @@ class ExtractService:
         file: UploadFile,
         template_id: str,
         context: Optional[dict],
-        current_user: User,
+        current_user: Dict[str, Any],
         api_key: Optional[APIKey] = None,
         config: Optional[dict] = None,
     ) -> ProcessResult:
@@ -80,7 +82,7 @@ class ExtractService:
             file: Uploaded file (PDF, JPG, PNG)
             template_id: Extraction template to use
             context: Optional context dict for template placeholders (e.g., {"company_name": "Acme Corp"})
-            current_user: Authenticated user
+            current_user: Authenticated user dict with id, email, is_superuser keys
             api_key: API key (if API request)
             config: Module configuration
 
@@ -100,7 +102,7 @@ class ExtractService:
         job = await self._create_job(
             db, file, template_id, context, current_user, api_key
         )
-        logger.info("Created Extract job %s for user %s", job.id, current_user.id)
+        logger.info("Created Extract job %s for user %s", job.id, current_user["id"])
 
         try:
             # 2. Process file to images
@@ -155,7 +157,7 @@ class ExtractService:
                 model=model_name,
                 messages=messages,
                 response_format={"type": "json_object"},
-                user_id=str(current_user.id),
+                user_id=str(current_user["id"]),
                 api_key_id=api_key.id if api_key else 0,
             )
 
@@ -187,7 +189,7 @@ class ExtractService:
             if api_key:
                 auth_service = APIKeyAuthService(db)
                 await auth_service.update_usage_stats(
-                    {"api_key_id": api_key.id, "user_id": str(current_user.id)},
+                    {"api_key_id": api_key.id, "user_id": str(current_user["id"])},
                     response.usage.total_tokens,
                     actual_cost_cents,
                 )
@@ -228,10 +230,12 @@ class ExtractService:
             )
 
         except BudgetExceededError:
+            await db.rollback()  # Explicit rollback before marking failed
             await self._mark_job_failed(db, job, "Budget exceeded")
             raise
         except Exception as e:
             logger.exception("Extract processing failed for job %s", job.id)
+            await db.rollback()  # Explicit rollback before marking failed
             await self._mark_job_failed(db, job, str(e))
             raise ProcessingError(f"Processing failed: {e}") from e
 
@@ -378,7 +382,7 @@ class ExtractService:
         file: UploadFile,
         template_id: str,
         context: Optional[dict],
-        current_user: User,
+        current_user: Dict[str, Any],
         api_key: Optional[APIKey],
     ) -> ExtractJob:
         """Create job record in database."""
@@ -402,7 +406,7 @@ class ExtractService:
         context_json = json.dumps(context) if context else None
 
         job = ExtractJob(
-            user_id=current_user.id,
+            user_id=current_user["id"],
             api_key_id=api_key.id if api_key else None,
             filename=safe_filename,
             original_filename=original_filename,
@@ -430,10 +434,10 @@ class ExtractService:
         cost_cents: int,
     ) -> ExtractResult:
         """Save extraction result and update job."""
-        # Count existing results for attempt number
-        stmt = select(ExtractResult).where(ExtractResult.job_id == job.id)
-        existing = await db.execute(stmt)
-        attempt_number = len(existing.scalars().all()) + 1
+        # Count existing results for attempt number using proper COUNT query
+        count_stmt = select(func.count(ExtractResult.id)).where(ExtractResult.job_id == job.id)
+        count_result = await db.execute(count_stmt)
+        attempt_number = count_result.scalar_one() + 1
 
         result = ExtractResult(
             job_id=job.id,
@@ -454,11 +458,11 @@ class ExtractService:
 
         if not validation_result.has_errors:
             job.status = "completed"
-            job.completed_at = datetime.utcnow()
+            job.completed_at = utc_now()
         else:
             # Mark job as complete with errors - don't leave it stuck in processing
             job.status = "completed_with_errors"
-            job.completed_at = datetime.utcnow()
+            job.completed_at = utc_now()
 
         await db.commit()
         await db.refresh(result)
@@ -469,8 +473,11 @@ class ExtractService:
         """Mark job as failed."""
         job.status = "failed"
         job.error_message = error
-        job.completed_at = datetime.utcnow()
+        job.completed_at = utc_now()
         await db.commit()
+
+    # Valid job status values
+    ALLOWED_STATUSES = ["pending", "processing", "completed", "failed", "completed_with_errors"]
 
     async def list_jobs(
         self,
@@ -484,6 +491,8 @@ class ExtractService:
         stmt = select(ExtractJob).where(ExtractJob.user_id == user_id)
 
         if status:
+            if status not in self.ALLOWED_STATUSES:
+                raise ValueError(f"Invalid status '{status}'. Allowed: {self.ALLOWED_STATUSES}")
             stmt = stmt.where(ExtractJob.status == status)
 
         stmt = stmt.order_by(ExtractJob.created_at.desc()).limit(limit).offset(offset)
@@ -491,20 +500,21 @@ class ExtractService:
         result = await db.execute(stmt)
         jobs = result.scalars().all()
 
-        # Count total
-        count_stmt = select(ExtractJob).where(ExtractJob.user_id == user_id)
+        # Count total using proper COUNT query (not loading all into memory)
+        count_stmt = select(func.count(ExtractJob.id)).where(ExtractJob.user_id == user_id)
         if status:
             count_stmt = count_stmt.where(ExtractJob.status == status)
         total_result = await db.execute(count_stmt)
-        total = len(total_result.scalars().all())
+        total = total_result.scalar_one()
 
         return {"jobs": jobs, "total": total, "limit": limit, "offset": offset}
 
     async def get_job(self, db: AsyncSession, job_id: str, user_id: int):
         """Get job details with result."""
+        # Use eager loading to avoid N+1 query when accessing job.results
         stmt = select(ExtractJob).where(
             ExtractJob.id == job_id, ExtractJob.user_id == user_id
-        )
+        ).options(selectinload(ExtractJob.results))
         result = await db.execute(stmt)
         job = result.scalar_one_or_none()
 

@@ -12,6 +12,7 @@ from typing import List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.database import utc_now
 from app.models.extract_template import ExtractTemplate
 
 from ..exceptions import TemplateExistsError, TemplateNotFoundError
@@ -123,7 +124,7 @@ class TemplateManager:
         for field, value in update_data.items():
             setattr(template, field, value)
 
-        template.updated_at = datetime.utcnow()
+        template.updated_at = utc_now()
 
         await self.db.commit()
         await self.db.refresh(template)
@@ -162,7 +163,7 @@ class TemplateManager:
                 # Update to original values
                 for field, value in template_data.items():
                     setattr(existing, field, value)
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = utc_now()
                 logger.info("Reset template: %s", template_data["id"])
             else:
                 # Recreate deleted template

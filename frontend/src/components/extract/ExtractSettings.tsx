@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { apiClient } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { Settings, Loader2 } from "lucide-react"
+import { getErrorMessage } from "@/lib/extract-utils"
 
 interface ExtractSettings {
   id: number
@@ -31,12 +32,7 @@ export function ExtractSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    loadSettings()
-    loadModels()
-  }, [])
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       const data = await apiClient.get<ExtractSettings>("/api-internal/v1/extract/settings")
       setSettings(data)
@@ -47,31 +43,35 @@ export function ExtractSettings() {
         // Will be set after models load
         setSelectedModel("")
       }
-    } catch (error) {
+    } catch (error: unknown) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load settings",
+        description: getErrorMessage(error, "Failed to load settings"),
         variant: "destructive",
       })
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
-  const loadModels = async () => {
+  const loadModels = useCallback(async () => {
     try {
       // Get available vision-capable models from Extract endpoint
       const response = await apiClient.get<{ models: ModelInfo[] }>("/api/v1/extract/models")
       setAvailableModels(response.models)
     } catch (error) {
-      console.error("Failed to load models:", error)
       toast({
         title: "Warning",
         description: "Failed to load available models. Using platform defaults.",
         variant: "default",
       })
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    loadSettings()
+    loadModels()
+  }, [loadSettings, loadModels])
 
   const saveSettings = async () => {
     setSaving(true)
@@ -85,10 +85,10 @@ export function ExtractSettings() {
         title: "Settings Saved",
         description: "Extract settings have been updated successfully.",
       })
-    } catch (error) {
+    } catch (error: unknown) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save settings",
+        description: getErrorMessage(error, "Failed to save settings"),
         variant: "destructive",
       })
     } finally {

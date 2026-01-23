@@ -5,9 +5,11 @@ Handles file validation, PDF conversion, and image encoding
 for vision model input.
 """
 
+import asyncio
 import base64
 import io
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List
 
@@ -18,6 +20,9 @@ from pdf2image import convert_from_bytes
 from ..exceptions import FileTooLargeError, InvalidFileError
 
 logger = logging.getLogger(__name__)
+
+# Thread pool executor for CPU-intensive operations
+_executor = ThreadPoolExecutor(max_workers=4)
 
 
 class DocumentProcessor:
@@ -37,6 +42,7 @@ class DocumentProcessor:
         "image/png",
         "application/pdf",
     }
+    MAX_PDF_PAGES = 20  # Limit pages to prevent memory exhaustion
 
     async def process_file(
         self,
@@ -78,13 +84,36 @@ class DocumentProcessor:
         filename = file.filename or ""
         ext = Path(filename).suffix.lower()
 
+        # Run CPU-intensive operations in thread pool to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+
         if ext == ".pdf" or file.content_type == "application/pdf":
-            images = self._convert_pdf_to_images(content)
+            images = await loop.run_in_executor(
+                _executor,
+                self._convert_pdf_to_images,
+                content
+            )
             logger.debug("Converted PDF to %d images", len(images))
         else:
-            images = [Image.open(io.BytesIO(content))]
+            images = await loop.run_in_executor(
+                _executor,
+                lambda: [Image.open(io.BytesIO(content))]
+            )
 
-        # Resize and encode each image
+        # Process images in executor (resize and encode)
+        encoded_images = await loop.run_in_executor(
+            _executor,
+            self._process_images_sync,
+            images,
+            max_dimension
+        )
+
+        return encoded_images
+
+    def _process_images_sync(
+        self, images: List[Image.Image], max_dimension: int
+    ) -> List[str]:
+        """Synchronous image processing for executor."""
         encoded_images = []
         for i, img in enumerate(images):
             resized = self._resize_image(img, max_dimension)
@@ -99,7 +128,6 @@ class DocumentProcessor:
                 resized.size[1],
                 len(encoded),
             )
-
         return encoded_images
 
     def _validate_file(self, file: UploadFile, max_size_mb: int):
@@ -155,10 +183,22 @@ class DocumentProcessor:
             dpi: Resolution for conversion (200 DPI is good for text)
 
         Returns:
-            List of PIL Images, one per page
+            List of PIL Images, one per page (limited to MAX_PDF_PAGES)
         """
         try:
-            return convert_from_bytes(pdf_bytes, dpi=dpi)
+            # Limit pages to prevent memory exhaustion
+            images = convert_from_bytes(
+                pdf_bytes,
+                dpi=dpi,
+                first_page=1,
+                last_page=self.MAX_PDF_PAGES
+            )
+            if len(images) == self.MAX_PDF_PAGES:
+                logger.warning(
+                    "PDF truncated to %d pages to prevent memory exhaustion",
+                    self.MAX_PDF_PAGES
+                )
+            return images
         except Exception as e:
             logger.error("PDF conversion failed: %s", e)
             raise InvalidFileError(f"Failed to process PDF: {e}") from e

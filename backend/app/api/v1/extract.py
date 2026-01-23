@@ -15,7 +15,9 @@ from fastapi import (
     UploadFile,
     status,
 )
+from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user, get_extract_auth_context
@@ -25,6 +27,7 @@ from app.models.extract_settings import ExtractSettings
 from app.models.user import User
 from app.modules.extract.exceptions import TemplateExistsError, TemplateNotFoundError
 from app.modules.extract.schemas import (
+    ExtractContext,
     ExtractSettingsResponse,
     ExtractSettingsUpdate,
     JobDetailResponse,
@@ -44,6 +47,27 @@ router = APIRouter()
 extract_service = ExtractService()
 wizard_service = TemplateWizardService()
 doc_processor = DocumentProcessor()
+
+# Permission required to manage extract templates
+PERMISSION_MANAGE_EXTRACT_TEMPLATES = "manage_extract_templates"
+
+
+def check_template_management_permission(current_user: User) -> None:
+    """
+    Check if user has permission to manage extract templates.
+
+    Raises HTTPException 403 if user lacks permission.
+    """
+    # Superusers always have permission
+    if current_user.is_superuser:
+        return
+
+    # Check for specific permission using the user's has_permission method
+    if not current_user.has_permission(PERMISSION_MANAGE_EXTRACT_TEMPLATES):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission '{PERMISSION_MANAGE_EXTRACT_TEMPLATES}' required to manage templates"
+        )
 
 
 # --- Document Processing ---
@@ -70,18 +94,39 @@ async def process_document(
     """
     current_user, api_key = auth
 
-    # Parse context JSON
+    # Parse and validate context JSON
     context_dict = None
     if context:
         try:
-            context_dict = json.loads(context)
+            parsed_context = json.loads(context)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON in context parameter")
 
-    # Get configuration (use default config for now)
+        # Validate context structure and value types
+        try:
+            validated_context = ExtractContext.model_validate(parsed_context)
+            context_dict = validated_context.to_dict()
+        except ValidationError as e:
+            # Extract the first error message for a cleaner response
+            error_messages = []
+            for error in e.errors():
+                msg = error.get("msg", "Validation error")
+                # Remove "Value error, " prefix that Pydantic adds
+                if msg.startswith("Value error, "):
+                    msg = msg[13:]
+                error_messages.append(msg)
+            detail = "; ".join(error_messages) if error_messages else "Invalid context format"
+            raise HTTPException(status_code=400, detail=detail)
+
+    # Load settings from database if available
+    settings_stmt = select(ExtractSettings).where(ExtractSettings.id == 1)
+    settings_result = await db.execute(settings_stmt)
+    settings = settings_result.scalar_one_or_none()
+
+    # Get configuration with database settings or defaults
     config = {
         "default_template": "detailed_invoice",
-        "vision_model": "gpt-4o",
+        "vision_model": settings.default_model if settings else None,
         "max_file_size_mb": 10,
         "image_max_dimension": 1024,
         "auto_reprocess": True,
@@ -89,35 +134,34 @@ async def process_document(
     }
     template_id = template or config.get("default_template", "detailed_invoice")
 
-    # API key permission checks
+    # API key scope check
     if api_key:
-        # Check scope
         if not api_key.has_scope("extract"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Scope 'extract' required"
             )
 
-        # Check template access
-        if not api_key.can_access_template(template_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Not authorized to use template '{template_id}'"
-            )
+    # Verify template exists BEFORE checking access (prevents enumeration)
+    template_manager = TemplateManager(db)
+    try:
+        await template_manager.get_template(template_id)
+    except TemplateNotFoundError:
+        raise HTTPException(status_code=404, detail="Template not found")
 
-    # Convert user dict to User object for extract_service
-    user_obj = User(
-        id=current_user["id"],
-        email=current_user.get("email"),
-        is_superuser=current_user.get("is_superuser", False),
-    )
+    # Then check access (after we know template exists)
+    if api_key and not api_key.can_access_template(template_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to use this template"
+        )
 
     result = await extract_service.process_document(
         db=db,
         file=file,
         template_id=template_id,
         context=context_dict,
-        current_user=user_obj,
+        current_user=current_user,  # Pass dict directly
         api_key=api_key,
         config=config,
     )
@@ -210,9 +254,23 @@ async def list_templates(
 async def get_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: tuple[Dict[str, Any], Optional[APIKey]] = Depends(get_extract_auth_context),
 ):
-    """Get a template with full details including prompts."""
+    """
+    Get a template with full details including prompts.
+
+    Authentication: JWT (frontend) or API key (external)
+    Required scope (API key): extract
+    """
+    current_user, api_key = auth
+
+    # API key scope check
+    if api_key and not api_key.has_scope("extract"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Scope 'extract' required"
+        )
+
     manager = TemplateManager(db)
     try:
         template = await manager.get_template(template_id)
@@ -227,7 +285,8 @@ async def create_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new extraction template."""
+    """Create a new extraction template. Requires manage_extract_templates permission."""
+    check_template_management_permission(current_user)
     manager = TemplateManager(db)
     try:
         result = await manager.create_template(template)
@@ -243,7 +302,8 @@ async def update_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update any template (including defaults)."""
+    """Update any template (including defaults). Requires manage_extract_templates permission."""
+    check_template_management_permission(current_user)
     manager = TemplateManager(db)
     try:
         result = await manager.update_template(template_id, template)
@@ -258,7 +318,8 @@ async def delete_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete any template."""
+    """Delete any template. Requires manage_extract_templates permission."""
+    check_template_management_permission(current_user)
     manager = TemplateManager(db)
     try:
         await manager.delete_template(template_id)
@@ -271,7 +332,8 @@ async def reset_default_templates(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Reset all default templates to their original state."""
+    """Reset all default templates to their original state. Requires manage_extract_templates permission."""
+    check_template_management_permission(current_user)
     manager = TemplateManager(db)
     await manager.reset_defaults()
     return {"status": "defaults_restored"}
@@ -400,14 +462,22 @@ async def get_settings(
 
             first_model = vision_models[0].id
 
-            if not settings:
-                settings = ExtractSettings(id=1, default_model=first_model)
-                db.add(settings)
-            else:
-                settings.default_model = first_model
-
+            # Use upsert to avoid race conditions under concurrent load
+            upsert_stmt = pg_insert(ExtractSettings).values(
+                id=1,
+                default_model=first_model
+            ).on_conflict_do_update(
+                index_elements=['id'],
+                set_={'default_model': first_model}
+            )
+            await db.execute(upsert_stmt)
             await db.commit()
-            await db.refresh(settings)
+
+            # Re-fetch the settings
+            result = await db.execute(
+                select(ExtractSettings).where(ExtractSettings.id == 1)
+            )
+            settings = result.scalar_one()
 
         except HTTPException:
             raise
