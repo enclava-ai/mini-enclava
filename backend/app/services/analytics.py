@@ -192,10 +192,11 @@ class AnalyticsService:
                 return cached_data
 
         try:
-            cutoff_time = utc_now() - timedelta(hours=hours)
+            db_cutoff_time = utc_now() - timedelta(hours=hours)
+            event_cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-            # Build query filters
-            filters = [UsageTracking.created_at >= cutoff_time]
+            # Build query filters (use naive datetime for database)
+            filters = [UsageTracking.created_at >= db_cutoff_time]
             if user_id:
                 filters.append(UsageTracking.user_id == user_id)
             if api_key_id:
@@ -204,8 +205,8 @@ class AnalyticsService:
             # Get usage tracking records
             usage_records = self.db.query(UsageTracking).filter(and_(*filters)).all()
 
-            # Get recent events from memory
-            recent_events = [e for e in self.events if e.timestamp >= cutoff_time]
+            # Get recent events from memory (use aware datetime for events)
+            recent_events = [e for e in self.events if e.timestamp >= event_cutoff_time]
             if user_id:
                 recent_events = [e for e in recent_events if e.user_id == user_id]
             if api_key_id:
@@ -533,7 +534,8 @@ class AnalyticsService:
         """Cleanup old events from memory"""
         while self.enabled:
             try:
-                cutoff_time = utc_now() - timedelta(hours=24)
+                # Use timezone-aware datetime for comparison with event timestamps
+                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
                 # Remove old events
                 while self.events and self.events[0].timestamp < cutoff_time:
@@ -670,7 +672,8 @@ class InMemoryAnalyticsService:
                 return cached_data
 
         try:
-            cutoff_time = utc_now() - timedelta(hours=hours)
+            # Use timezone-aware datetime for comparison with event timestamps
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
             # Get recent events from memory
             recent_events = [e for e in self.events if e.timestamp >= cutoff_time]
@@ -892,7 +895,8 @@ class InMemoryAnalyticsService:
     ) -> Dict[str, Any]:
         """Get detailed cost analysis and trends"""
         try:
-            cutoff_time = utc_now() - timedelta(days=days)
+            # Use timezone-aware datetime for comparison with event timestamps
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
 
             # Get events from memory
             events = [e for e in self.events if e.timestamp >= cutoff_time]
@@ -962,7 +966,8 @@ class InMemoryAnalyticsService:
         """Cleanup old events from memory"""
         while self.enabled:
             try:
-                cutoff_time = utc_now() - timedelta(hours=24)
+                # Use timezone-aware datetime for comparison with event timestamps
+                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
 
                 # Remove old events
                 while self.events and self.events[0].timestamp < cutoff_time:

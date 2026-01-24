@@ -207,16 +207,9 @@ export function ChatInterface({ chatbotId, chatbotName, onClose }: ChatInterface
   return (
     <Card className="h-full flex flex-col bg-background border-border">
       <CardHeader className="pb-3 border-b border-border flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <MessageCircle className="h-5 w-5" />
-            <CardTitle className="text-lg">Testing: {chatbotName}</CardTitle>
-          </div>
-          {onClose && (
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              ×
-            </Button>
-          )}
+        <div className="flex items-center space-x-2">
+          <MessageCircle className="h-5 w-5" />
+          <CardTitle className="text-lg">Testing: {chatbotName}</CardTitle>
         </div>
         <Separator />
       </CardHeader>
