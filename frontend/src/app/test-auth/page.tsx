@@ -27,7 +27,7 @@ export default function TestAuthPage() {
     const expiry = tokenManager.getTokenExpiry()
     const refreshExpiry = tokenManager.getRefreshTokenExpiry()
 
-    if (!expiry.access_token_expiry) return "No token"
+    if (!expiry || !expiry.access_token_expiry) return "No token"
 
     const now = new Date()
     const accessTimeUntilExpiry = Math.floor((expiry.access_token_expiry - now.getTime() / 1000))

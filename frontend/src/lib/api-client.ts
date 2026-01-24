@@ -271,6 +271,7 @@ export const extractApi = {
     system_prompt: string
     user_prompt: string
     output_schema?: any
+    model?: string
   }) {
     return apiClient.post('/api/v1/extract/templates', template)
   },
@@ -283,6 +284,7 @@ export const extractApi = {
     system_prompt?: string
     user_prompt?: string
     output_schema?: any
+    model?: string | null
   }) {
     return apiClient.put(`/api/v1/extract/templates/${encodeURIComponent(templateId)}`, updates)
   },

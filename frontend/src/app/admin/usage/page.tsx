@@ -182,7 +182,6 @@ export default function AdminUsageOverviewPage() {
               icon={<BarChart3 className="h-4 w-4" />}
             />
           </div>
-        </div>
 
           <Card>
             <CardHeader>

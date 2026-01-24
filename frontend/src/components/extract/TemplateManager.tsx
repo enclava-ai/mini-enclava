@@ -31,6 +31,7 @@ interface Template {
   is_default: boolean
   is_active: boolean
   output_schema?: Record<string, JsonValue>
+  model?: string | null
 }
 
 interface TemplateFormData {
@@ -38,6 +39,7 @@ interface TemplateFormData {
   description: string
   system_prompt: string
   user_prompt: string
+  model: string
 }
 
 interface ModelOption {
@@ -68,6 +70,7 @@ export function TemplateManager() {
     description: "",
     system_prompt: "",
     user_prompt: "",
+    model: "",
   })
 
   const loadTemplates = useCallback(async () => {
@@ -135,7 +138,13 @@ export function TemplateManager() {
     }
 
     try {
-      await extractApi.createTemplate(formData)
+      await extractApi.createTemplate({
+        id: formData.id,
+        description: formData.description || undefined,
+        system_prompt: formData.system_prompt,
+        user_prompt: formData.user_prompt,
+        model: formData.model || undefined,
+      })
       toast({
         title: "Success",
         description: "Template created successfully",
@@ -169,6 +178,7 @@ export function TemplateManager() {
         description: formData.description,
         system_prompt: formData.system_prompt,
         user_prompt: formData.user_prompt,
+        model: formData.model || null,
       })
       toast({
         title: "Success",
@@ -233,6 +243,7 @@ export function TemplateManager() {
       description: template.description || "",
       system_prompt: template.system_prompt,
       user_prompt: template.user_prompt,
+      model: template.model || "",
     })
     setIsEditDialogOpen(true)
   }
@@ -243,6 +254,7 @@ export function TemplateManager() {
       description: "",
       system_prompt: "",
       user_prompt: "",
+      model: "",
     })
   }
 
@@ -288,6 +300,7 @@ export function TemplateManager() {
           description: result.template.description || "",
           system_prompt: result.template.system_prompt || "",
           user_prompt: result.template.user_prompt || "",
+          model: "",
         })
       }
 
@@ -317,7 +330,13 @@ export function TemplateManager() {
     }
 
     try {
-      await extractApi.createTemplate(formData)
+      await extractApi.createTemplate({
+        id: formData.id,
+        description: formData.description || undefined,
+        system_prompt: formData.system_prompt,
+        user_prompt: formData.user_prompt,
+        model: formData.model || undefined,
+      })
       toast({
         title: "Success",
         description: "Template created successfully",
@@ -435,6 +454,29 @@ export function TemplateManager() {
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Brief description of what this template extracts"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-model">Vision Model Override</Label>
+                  <Select
+                    value={formData.model}
+                    onValueChange={(value) => setFormData({ ...formData, model: value === "__default__" ? "" : value })}
+                    disabled={loadingModels}
+                  >
+                    <SelectTrigger id="create-model">
+                      <SelectValue placeholder={loadingModels ? "Loading models..." : "Use default model"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__default__">Use default model</SelectItem>
+                      {availableModels.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name} ({model.provider})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Override the default vision model for this template. Leave empty to use the module default.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="create-system">System Prompt *</Label>
@@ -565,6 +607,29 @@ export function TemplateManager() {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-model">Vision Model Override</Label>
+              <Select
+                value={formData.model || "__default__"}
+                onValueChange={(value) => setFormData({ ...formData, model: value === "__default__" ? "" : value })}
+                disabled={loadingModels}
+              >
+                <SelectTrigger id="edit-model">
+                  <SelectValue placeholder={loadingModels ? "Loading models..." : "Use default model"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default__">Use default model</SelectItem>
+                  {availableModels.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.name} ({model.provider})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Override the default vision model for this template. Leave empty to use the module default.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-system">System Prompt *</Label>
@@ -735,6 +800,30 @@ export function TemplateManager() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="wizard-model-override">Vision Model Override</Label>
+                <Select
+                  value={formData.model || "__default__"}
+                  onValueChange={(value) => setFormData({ ...formData, model: value === "__default__" ? "" : value })}
+                  disabled={loadingModels}
+                >
+                  <SelectTrigger id="wizard-model-override">
+                    <SelectValue placeholder={loadingModels ? "Loading models..." : "Use default model"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default__">Use default model</SelectItem>
+                    {availableModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name} ({model.provider})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Override the default vision model for this template. Leave empty to use the module default.
+                </p>
               </div>
 
               <div className="space-y-2">
