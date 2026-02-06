@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% from "macros/components.html" import card, badge, alert %}
+{% from "macros/forms.html" import input, csrf_input %}
+
+{% block title %}Settings - Enclava{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+  <!-- Header -->
+  <div>
+    <h1 class="text-3xl font-display font-bold">Settings</h1>
+    <p class="text-muted-foreground mt-1">Platform configuration and status</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Profile Settings -->
+    <div class="rounded-lg border bg-card p-6">
+      <h2 class="text-lg font-semibold mb-4">Profile</h2>
+
+      <div id="profile-form">
+        {% include "pages/settings/_profile_form.html" %}
+      </div>
+    </div>
+
+    <!-- Module Status -->
+    <div class="rounded-lg border bg-card p-6">
+      <h2 class="text-lg font-semibold mb-4">Module Status</h2>
+
+      {% if modules %}
+      <div class="space-y-3">
+        {% for name, module in modules.items() %}
+        <div class="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-full {% if module.healthy %}bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400{% else %}bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400{% endif %}">
+              {% if module.healthy %}
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              {% else %}
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              {% endif %}
+            </div>
+            <div>
+              <span class="font-medium capitalize">{{ name }}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            {% if module.enabled %}
+            {{ badge('Enabled', variant='default') }}
+            {% else %}
+            {{ badge('Disabled', variant='secondary') }}
+            {% endif %}
+            {% if module.healthy %}
+            {{ badge('Healthy', variant='secondary') }}
+            {% else %}
+            {{ badge('Unhealthy', variant='destructive') }}
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-sm text-muted-foreground text-center py-4">No modules loaded</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- LLM Providers -->
+  <div class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-4">LLM Providers</h2>
+
+    {% if llm_providers %}
+    <div class="space-y-4">
+      {% for provider in llm_providers %}
+      <div class="p-4 bg-muted/50 rounded-md">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-full {% if provider.healthy %}bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400{% else %}bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400{% endif %}">
+              {% if provider.healthy %}
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              {% else %}
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              {% endif %}
+            </div>
+            <div>
+              <span class="font-medium capitalize">{{ provider.name }}</span>
+              <span class="ml-2 text-sm text-muted-foreground">({{ provider.model_count }} models)</span>
+            </div>
+          </div>
+          <div>
+            {% if provider.healthy %}
+            {{ badge('Healthy', variant='default') }}
+            {% else %}
+            {{ badge(provider.status | title, variant='destructive') }}
+            {% endif %}
+          </div>
+        </div>
+
+        {% if provider.models %}
+        <div class="mt-2">
+          <p class="text-xs text-muted-foreground mb-2">Available Models:</p>
+          <div class="flex flex-wrap gap-1">
+            {% for model in provider.models[:10] %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-background border">
+              {{ model.name }}
+            </span>
+            {% endfor %}
+            {% if provider.models | length > 10 %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs text-muted-foreground">
+              +{{ provider.models | length - 10 }} more
+            </span>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    {{ alert('warning', message='No LLM providers configured. Set REDPILL_API_KEY or PRIVATEMODE_API_KEY environment variables.') }}
+    {% endif %}
+  </div>
+
+  <!-- API Documentation -->
+  <div class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-4">API Documentation</h2>
+    <div class="flex items-center gap-4">
+      <a
+        href="/api/v1/docs"
+        target="_blank"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        Open API Docs
+      </a>
+      <a
+        href="/api/v1/redoc"
+        target="_blank"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-input hover:bg-accent"
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+        </svg>
+        ReDoc
+      </a>
+    </div>
+  </div>
+
+  <!-- About -->
+  <div class="text-center text-sm text-muted-foreground">
+    <p>Enclava - Confidential AI Platform</p>
+    <p class="mt-1">
+      Powered by
+      <a href="https://privatemode.ai" target="_blank" rel="noopener" class="text-primary hover:underline">
+        privatemode.ai
+      </a>
+    </p>
+  </div>
+</div>
+{% endblock %}

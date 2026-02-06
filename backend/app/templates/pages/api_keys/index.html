@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "macros/components.html" import button, badge, empty_state %}
+{% from "macros/tables.html" import table, table_row, table_cell, pagination, status_badge, action_button %}
+{% from "macros/modals.html" import modal, modal_footer %}
+{% from "macros/forms.html" import input, textarea, date_input, csrf_input %}
+
+{% block title %}API Keys - Enclava{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-display font-bold">API Keys</h1>
+      <p class="text-muted-foreground mt-1">Manage API keys for external integrations</p>
+    </div>
+    {{ button('Create API Key', hx_attrs={'onclick': "openModal('create-key-modal')"}) }}
+  </div>
+
+  <!-- Table Container -->
+  <div id="table-container">
+    {% include "pages/api_keys/_list.html" %}
+  </div>
+</div>
+
+<!-- Create API Key Modal -->
+<dialog id="create-key-modal" class="rounded-lg border bg-card text-card-foreground shadow-lg p-0 backdrop:bg-black/50 max-w-lg w-full">
+  <form
+    hx-post="/api-keys"
+    hx-target="#key-created-content"
+    hx-swap="innerHTML"
+    hx-on::after-request="if(event.detail.successful) { closeModal('create-key-modal'); openModal('key-created-modal'); }"
+    class="flex flex-col"
+  >
+    {{ csrf_input(csrf_token) }}
+
+    <div class="flex items-center justify-between p-6 border-b">
+      <div>
+        <h2 class="text-lg font-semibold">Create API Key</h2>
+        <p class="text-sm text-muted-foreground">Generate a new API key for integrations</p>
+      </div>
+      <button type="button" onclick="closeModal('create-key-modal')" class="opacity-70 hover:opacity-100">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="p-6 space-y-4">
+      {{ input(name='name', label='Name', placeholder='e.g., Production API', required=true) }}
+      {{ textarea(name='description', label='Description', placeholder='What is this key used for?', rows=2) }}
+      {{ date_input(name='expires_at', label='Expiration Date', min=today) }}
+      <p class="text-sm text-muted-foreground">Leave empty for no expiration</p>
+    </div>
+
+    <div class="flex justify-end gap-3 p-6 pt-0 border-t">
+      <button type="button" onclick="closeModal('create-key-modal')" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 border border-input bg-background hover:bg-accent">
+        Cancel
+      </button>
+      {{ button('Create Key', type='submit') }}
+    </div>
+  </form>
+</dialog>
+
+<!-- Key Created Modal -->
+<dialog id="key-created-modal" class="rounded-lg border bg-card text-card-foreground shadow-lg p-0 backdrop:bg-black/50 max-w-lg w-full">
+  <div class="p-6">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="p-2 rounded-full bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400">
+        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold">API Key Created</h2>
+    </div>
+
+    <div id="key-created-content">
+      <!-- Content will be injected by HTMX -->
+    </div>
+
+    <div class="flex justify-end gap-3 mt-6 pt-4 border-t">
+      <button
+        type="button"
+        onclick="closeModal('key-created-modal'); window.location.reload();"
+        class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 bg-primary text-primary-foreground hover:bg-primary/90"
+      >
+        Done
+      </button>
+    </div>
+  </div>
+</dialog>
+{% endblock %}

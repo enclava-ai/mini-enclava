@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "macros/components.html" import button %}
+
+{% block title %}Extract - Enclava{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Header -->
+  <div>
+    <h1 class="text-3xl font-display font-bold">Extract</h1>
+    <p class="text-muted-foreground mt-1">Extract structured data from documents using AI</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="border-b">
+    <nav class="flex space-x-8" aria-label="Tabs">
+      <button
+        hx-get="/extract?tab=process"
+        hx-target="#tab-content"
+        hx-push-url="true"
+        class="tab-button {% if tab == 'process' %}active{% endif %}"
+      >
+        Process Documents
+      </button>
+      <button
+        hx-get="/extract?tab=templates"
+        hx-target="#tab-content"
+        hx-push-url="true"
+        class="tab-button {% if tab == 'templates' %}active{% endif %}"
+      >
+        Manage Templates
+      </button>
+      <button
+        hx-get="/extract?tab=wizard"
+        hx-target="#tab-content"
+        hx-push-url="true"
+        class="tab-button {% if tab == 'wizard' %}active{% endif %}"
+      >
+        Template Wizard
+      </button>
+      <button
+        hx-get="/extract?tab=settings"
+        hx-target="#tab-content"
+        hx-push-url="true"
+        class="tab-button {% if tab == 'settings' %}active{% endif %}"
+      >
+        Settings
+      </button>
+      <button
+        hx-get="/extract?tab=integration"
+        hx-target="#tab-content"
+        hx-push-url="true"
+        class="tab-button {% if tab == 'integration' %}active{% endif %}"
+      >
+        API Integration
+      </button>
+    </nav>
+  </div>
+
+  <!-- Tab Content -->
+  <div id="tab-content">
+    {% include "pages/extract/_" ~ tab ~ ".html" %}
+  </div>
+</div>
+{% endblock %}

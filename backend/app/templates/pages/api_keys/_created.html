@@ -1,0 +1,36 @@
+{% from "macros/components.html" import alert %}
+
+{% if regenerated %}
+<p class="text-sm text-muted-foreground mb-4">
+  Your API key has been regenerated. The old key is no longer valid.
+</p>
+{% else %}
+<p class="text-sm text-muted-foreground mb-4">
+  Your API key has been created. Make sure to copy it now - you won't be able to see it again.
+</p>
+{% endif %}
+
+<div class="space-y-4">
+  <div>
+    <label class="text-sm font-medium">Name</label>
+    <p class="text-sm mt-1">{{ api_key.name }}</p>
+  </div>
+
+  <div>
+    <label class="text-sm font-medium">API Key</label>
+    <div class="flex items-center gap-2 mt-1 p-3 bg-muted rounded-md font-mono text-sm">
+      <span class="flex-1 break-all" id="full-api-key">{{ full_key }}</span>
+      <button
+        type="button"
+        onclick="copyToClipboard(document.getElementById('full-api-key').textContent, this)"
+        class="shrink-0 p-1.5 rounded hover:bg-accent"
+      >
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+{{ alert('warning', message='This is the only time you will see this key. Store it securely.', class='mt-4') }}

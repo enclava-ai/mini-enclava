@@ -200,7 +200,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         "/api/v1/docs",
         "/api/v1/redoc",
         "/api/v1/openapi.json",
+        "/static",
+        "/favicon.ico",
     }
+
+    # Web routes exempt from rate limiting (protected by session auth)
+    WEB_ROUTE_PREFIXES = (
+        "/login",
+        "/logout",
+        "/dashboard",
+        "/extract",
+        "/api-keys",
+        "/budgets",
+        "/analytics",
+        "/settings",
+    )
 
     def __init__(self, app, exclude_paths: Optional[list] = None):
         super().__init__(app)
@@ -266,6 +280,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Check if path is exempt from rate limiting"""
         if path in self.EXEMPT_ENDPOINTS:
             return True
+        # Check prefix matches (static files, etc.)
+        for exempt in self.EXEMPT_ENDPOINTS:
+            if path.startswith(exempt + "/"):
+                return True
+        # Check web route prefixes (session-auth protected)
+        for prefix in self.WEB_ROUTE_PREFIXES:
+            if path == prefix or path.startswith(prefix + "/") or path.startswith(prefix + "?"):
+                return True
         for exclude in self.exclude_paths:
             if path.startswith(exclude):
                 return True

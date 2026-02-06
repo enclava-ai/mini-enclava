@@ -1,0 +1,104 @@
+{% from "macros/components.html" import card %}
+
+<div class="space-y-6">
+  <!-- API Endpoint -->
+  <div class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-4">API Integration</h2>
+
+    <div class="space-y-4">
+      <div>
+        <label class="text-sm font-medium">Base URL</label>
+        <div class="flex items-center gap-2 mt-1 p-3 bg-muted rounded-md font-mono text-sm">
+          <span class="flex-1" id="base-url">{{ request.url.scheme }}://{{ request.url.netloc }}/api/v1</span>
+          <button
+            type="button"
+            onclick="copyToClipboard(document.getElementById('base-url').textContent, this)"
+            class="shrink-0 p-1.5 rounded hover:bg-accent"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm font-medium">Authentication</label>
+        <p class="text-sm text-muted-foreground mt-1">
+          Include your API key in the Authorization header:
+        </p>
+        <pre class="mt-2 p-3 bg-muted rounded-md font-mono text-sm overflow-x-auto"><code>Authorization: Bearer YOUR_API_KEY</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Code Examples -->
+  <div class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-4">Code Examples</h2>
+
+    <div class="space-y-6">
+      <!-- cURL -->
+      <div>
+        <h3 class="text-sm font-medium mb-2">cURL</h3>
+        <pre class="p-4 bg-muted rounded-md font-mono text-sm overflow-x-auto"><code>curl -X POST "{{ request.url.scheme }}://{{ request.url.netloc }}/api/v1/extract" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@document.pdf" \
+  -F "template_id=YOUR_TEMPLATE_ID"</code></pre>
+      </div>
+
+      <!-- Python -->
+      <div>
+        <h3 class="text-sm font-medium mb-2">Python</h3>
+        <pre class="p-4 bg-muted rounded-md font-mono text-sm overflow-x-auto"><code>import requests
+
+url = "{{ request.url.scheme }}://{{ request.url.netloc }}/api/v1/extract"
+headers = {"Authorization": "Bearer YOUR_API_KEY"}
+
+with open("document.pdf", "rb") as f:
+    response = requests.post(
+        url,
+        headers=headers,
+        files={"file": f},
+        data={"template_id": "YOUR_TEMPLATE_ID"}
+    )
+
+result = response.json()
+print(result["extracted_data"])</code></pre>
+      </div>
+
+      <!-- JavaScript -->
+      <div>
+        <h3 class="text-sm font-medium mb-2">JavaScript</h3>
+        <pre class="p-4 bg-muted rounded-md font-mono text-sm overflow-x-auto"><code>const formData = new FormData();
+formData.append('file', document.querySelector('input[type="file"]').files[0]);
+formData.append('template_id', 'YOUR_TEMPLATE_ID');
+
+const response = await fetch('{{ request.url.scheme }}://{{ request.url.netloc }}/api/v1/extract', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY'
+  },
+  body: formData
+});
+
+const result = await response.json();
+console.log(result.extracted_data);</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- API Documentation Link -->
+  <div class="text-center">
+    <a
+      href="/api/v1/docs"
+      target="_blank"
+      class="inline-flex items-center gap-2 text-primary hover:underline"
+    >
+      View Full API Documentation
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+      </svg>
+    </a>
+  </div>
+</div>

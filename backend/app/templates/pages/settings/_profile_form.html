@@ -1,0 +1,26 @@
+{% from "macros/forms.html" import input, csrf_input %}
+{% from "macros/components.html" import button, alert %}
+
+{% if success %}
+{{ alert('success', message=message, class='mb-4') }}
+{% endif %}
+
+<form
+  hx-post="/settings/profile"
+  hx-target="#profile-form"
+  hx-swap="innerHTML"
+  class="space-y-4"
+>
+  {{ csrf_input(csrf_token) }}
+
+  <div class="space-y-2">
+    <label class="text-sm font-medium">Email</label>
+    <p class="text-sm text-muted-foreground">{{ user.email }}</p>
+  </div>
+
+  {{ input(name='name', label='Display Name', value=user.name if user.name else '', placeholder='Your name') }}
+
+  <div class="pt-2">
+    {{ button('Save Changes', type='submit') }}
+  </div>
+</form>

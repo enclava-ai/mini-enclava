@@ -1,0 +1,207 @@
+{# Table Macros for Enclava #}
+
+{# Table Container #}
+{% macro table(headers, class='') %}
+<div class="rounded-md border overflow-hidden {{ class }}">
+  <table class="w-full caption-bottom text-sm">
+    <thead class="[&_tr]:border-b bg-muted/50">
+      <tr class="border-b transition-colors">
+        {% for header in headers %}
+        <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground {% if header.class %}{{ header.class }}{% endif %}">
+          {{ header.label if header is mapping else header }}
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody class="[&_tr:last-child]:border-0">
+      {% if caller is defined %}{{ caller() }}{% endif %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{# Table Row #}
+{% macro table_row(class='', hx_attrs={}) %}
+<tr
+  class="border-b transition-colors hover:bg-muted/50 {{ class }}"
+  {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+>
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</tr>
+{% endmacro %}
+
+{# Table Cell #}
+{% macro table_cell(align='left', class='') %}
+{%- set align_classes = {
+  'left': 'text-left',
+  'center': 'text-center',
+  'right': 'text-right'
+} -%}
+<td class="p-4 align-middle {{ align_classes[align] }} {{ class }}">
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</td>
+{% endmacro %}
+
+{# Pagination Component #}
+{% macro pagination(current_page, total_pages, base_url, class='') %}
+{% if total_pages > 1 %}
+<nav class="flex items-center justify-between px-2 {{ class }}" aria-label="Pagination">
+  <div class="flex items-center gap-2">
+    <span class="text-sm text-muted-foreground">
+      Page {{ current_page }} of {{ total_pages }}
+    </span>
+  </div>
+  <div class="flex items-center gap-1">
+    {# Previous button #}
+    {% if current_page > 1 %}
+    <a
+      href="{{ base_url }}?page={{ current_page - 1 }}"
+      hx-get="{{ base_url }}?page={{ current_page - 1 }}"
+      hx-target="#table-container"
+      hx-push-url="true"
+      class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-3 border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+    >
+      <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+      Previous
+    </a>
+    {% else %}
+    <span class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-3 border border-input bg-background opacity-50 cursor-not-allowed">
+      <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+      Previous
+    </span>
+    {% endif %}
+
+    {# Page numbers #}
+    {% set start_page = [1, current_page - 2] | max %}
+    {% set end_page = [total_pages, current_page + 2] | min %}
+
+    {% if start_page > 1 %}
+    <a
+      href="{{ base_url }}?page=1"
+      hx-get="{{ base_url }}?page=1"
+      hx-target="#table-container"
+      hx-push-url="true"
+      class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 w-9 border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+    >1</a>
+    {% if start_page > 2 %}
+    <span class="px-2 text-muted-foreground">...</span>
+    {% endif %}
+    {% endif %}
+
+    {% for page in range(start_page, end_page + 1) %}
+    {% if page == current_page %}
+    <span class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 w-9 bg-primary text-primary-foreground">
+      {{ page }}
+    </span>
+    {% else %}
+    <a
+      href="{{ base_url }}?page={{ page }}"
+      hx-get="{{ base_url }}?page={{ page }}"
+      hx-target="#table-container"
+      hx-push-url="true"
+      class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 w-9 border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+    >{{ page }}</a>
+    {% endif %}
+    {% endfor %}
+
+    {% if end_page < total_pages %}
+    {% if end_page < total_pages - 1 %}
+    <span class="px-2 text-muted-foreground">...</span>
+    {% endif %}
+    <a
+      href="{{ base_url }}?page={{ total_pages }}"
+      hx-get="{{ base_url }}?page={{ total_pages }}"
+      hx-target="#table-container"
+      hx-push-url="true"
+      class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 w-9 border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+    >{{ total_pages }}</a>
+    {% endif %}
+
+    {# Next button #}
+    {% if current_page < total_pages %}
+    <a
+      href="{{ base_url }}?page={{ current_page + 1 }}"
+      hx-get="{{ base_url }}?page={{ current_page + 1 }}"
+      hx-target="#table-container"
+      hx-push-url="true"
+      class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-3 border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+    >
+      Next
+      <svg class="h-4 w-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
+    </a>
+    {% else %}
+    <span class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-3 border border-input bg-background opacity-50 cursor-not-allowed">
+      Next
+      <svg class="h-4 w-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
+    </span>
+    {% endif %}
+  </div>
+</nav>
+{% endif %}
+{% endmacro %}
+
+{# Empty table state #}
+{% macro table_empty(message='No items found', colspan=1) %}
+<tr>
+  <td colspan="{{ colspan }}" class="p-8 text-center text-muted-foreground">
+    {{ message }}
+  </td>
+</tr>
+{% endmacro %}
+
+{# Table action buttons #}
+{% macro table_actions(class='') %}
+<div class="flex items-center gap-2 {{ class }}">
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{# Action button for tables - icon only #}
+{% macro action_button(title, icon='pencil', variant='ghost', hx_attrs={}, onclick='') %}
+{%- set icons = {
+  'pencil': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>',
+  'trash': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>',
+  'eye': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>',
+  'refresh': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>',
+  'toggle': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>'
+} -%}
+{%- set variant_classes = {
+  'ghost': 'hover:bg-accent hover:text-accent-foreground',
+  'destructive': 'hover:bg-destructive/10 text-destructive'
+} -%}
+<button
+  type="button"
+  title="{{ title }}"
+  class="inline-flex items-center justify-center rounded-md h-8 w-8 text-sm transition-colors {{ variant_classes[variant] }}"
+  {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+  {% if onclick %}onclick="{{ onclick }}"{% endif %}
+>
+  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    {{ icons.get(icon, icons['pencil']) | safe }}
+  </svg>
+</button>
+{% endmacro %}
+
+{# Status badge for tables #}
+{% macro status_badge(status, class='') %}
+{%- set status_classes = {
+  'active': 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200',
+  'inactive': 'bg-gray-100 dark:bg-gray-900/20 text-gray-800 dark:text-gray-200',
+  'expired': 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200',
+  'pending': 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200',
+  'processing': 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200',
+  'completed': 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200',
+  'failed': 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200'
+} -%}
+<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold {{ status_classes.get(status, status_classes['inactive']) }} {{ class }}">
+  {{ status | title }}
+</span>
+{% endmacro %}

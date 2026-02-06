@@ -1,0 +1,75 @@
+{% from "macros/forms.html" import select, file_upload, csrf_input %}
+{% from "macros/components.html" import button, alert %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Wizard Upload Form -->
+  <div class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-2">Template Wizard</h2>
+    <p class="text-sm text-muted-foreground mb-4">
+      Upload a sample document and let AI analyze it to generate an extraction template automatically.
+    </p>
+
+    {% if vision_models %}
+    <form
+      hx-post="/extract/wizard/analyze"
+      hx-target="#wizard-result"
+      hx-swap="innerHTML"
+      hx-encoding="multipart/form-data"
+      hx-indicator="#wizard-indicator"
+      class="space-y-4"
+    >
+      {{ csrf_input(csrf_token) }}
+
+      {{ select(
+        name='model',
+        options=vision_models,
+        value=vision_models[0].value if vision_models else '',
+        label='Vision Model',
+        required=true
+      ) }}
+
+      <div class="space-y-1">
+        {{ file_upload(
+          name='file',
+          accept='.jpg,.jpeg,.png,.pdf',
+          max_size_mb=10,
+          label='Sample Document',
+          required=true
+        ) }}
+        <p class="text-xs text-muted-foreground">Upload an invoice, receipt, contract, or other document to analyze</p>
+      </div>
+
+      <div class="flex items-center gap-3 pt-2">
+        {{ button('Analyze Document', type='submit', variant='primary') }}
+        <div id="wizard-indicator" class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
+          <div class="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+          Analyzing document...
+        </div>
+      </div>
+    </form>
+    {% else %}
+    {{ alert('warning', message='No vision-capable models available. Please configure an LLM provider with vision models.') }}
+    {% endif %}
+
+    <div class="mt-6 pt-6 border-t">
+      <h3 class="text-sm font-medium mb-2">How it works</h3>
+      <ol class="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+        <li>Upload a sample document (invoice, receipt, contract, etc.)</li>
+        <li>AI analyzes the document structure and identifies fields</li>
+        <li>Review and customize the generated template</li>
+        <li>Save the template for future extractions</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Wizard Result -->
+  <div id="wizard-result" class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-4">Generated Template</h2>
+    <div class="text-center py-8 text-muted-foreground">
+      <svg class="h-12 w-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+      </svg>
+      <p>Upload a document to generate a template</p>
+    </div>
+  </div>
+</div>

@@ -115,6 +115,10 @@ class Settings(BaseSettings):
         os.getenv("ATTESTATION_VERIFICATION_INTERVAL_SECONDS", "300")
     )  # 5 minutes
 
+    # Skip attestation verification (for development/mini-enclava)
+    # WARNING: Only use in development! Disables TEE attestation checks.
+    SKIP_ATTESTATION_CHECK: bool = os.getenv("SKIP_ATTESTATION_CHECK", "false").lower() == "true"
+
     # Qdrant
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))

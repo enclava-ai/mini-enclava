@@ -1,0 +1,112 @@
+{% from "macros/forms.html" import input, textarea, select, csrf_input %}
+{% from "macros/components.html" import button, alert %}
+
+{% if not success %}
+  {# Error state #}
+  {{ alert('error', message=error or 'An error occurred during analysis') }}
+
+{% else %}
+  {# Success - show the generated template #}
+  <div class="space-y-4">
+    {# Document type badge #}
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-primary/10 text-primary">
+        {{ result.document_type | default('document') | replace('_', ' ') | title }}
+      </span>
+      {% if result.fields %}
+      <span class="text-sm text-muted-foreground">
+        {{ result.fields | length }} fields detected
+      </span>
+      {% endif %}
+    </div>
+
+    {# Detected fields summary #}
+    {% if result.fields %}
+    <details class="group">
+      <summary class="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
+        <span class="group-open:hidden">Show detected fields</span>
+        <span class="hidden group-open:inline">Hide detected fields</span>
+      </summary>
+      <div class="mt-2 p-3 rounded-md bg-muted/50 text-sm">
+        <ul class="space-y-1">
+          {% for field in result.fields %}
+          <li class="flex items-center gap-2">
+            <span class="font-mono text-xs px-1.5 py-0.5 rounded bg-muted">{{ field.type | default('string') }}</span>
+            <span class="font-medium">{{ field.name }}</span>
+            {% if field.required %}
+            <span class="text-xs text-orange-500">required</span>
+            {% endif %}
+            {% if field.description %}
+            <span class="text-muted-foreground">- {{ field.description | truncate(50) }}</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </details>
+    {% endif %}
+
+    {# Template form #}
+    <form
+      hx-post="/extract/templates"
+      hx-target="#wizard-result"
+      hx-swap="innerHTML"
+      class="space-y-4"
+    >
+      {{ csrf_input(csrf_token) }}
+
+      <div class="space-y-1">
+        {{ input(
+          name='template_id',
+          value=result.suggested_template_id | default('custom_template'),
+          label='Template ID',
+          required=true
+        ) }}
+        <p class="text-xs text-muted-foreground">Unique identifier (lowercase, underscores allowed)</p>
+      </div>
+
+      <div class="space-y-1">
+        {{ input(
+          name='description',
+          value=result.description | default(''),
+          label='Description'
+        ) }}
+        <p class="text-xs text-muted-foreground">Brief description of what this template extracts</p>
+      </div>
+
+      <div class="space-y-1">
+        {{ textarea(
+          name='system_prompt',
+          value=result.system_prompt | default(''),
+          label='System Prompt',
+          rows=6,
+          required=true
+        ) }}
+        <p class="text-xs text-muted-foreground">Instructions for the AI about how to extract data</p>
+      </div>
+
+      <div class="space-y-1">
+        {{ textarea(
+          name='user_prompt',
+          value=result.user_prompt | default(''),
+          label='User Prompt',
+          rows=8,
+          required=true
+        ) }}
+        <p class="text-xs text-muted-foreground">The prompt that defines the JSON structure to extract</p>
+      </div>
+
+      <div class="flex items-center gap-3 pt-2">
+        {{ button('Save Template', type='submit', variant='primary') }}
+        <button
+          type="button"
+          hx-get="/extract?tab=wizard"
+          hx-target="#tab-content"
+          class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+        >
+          Start Over
+        </button>
+      </div>
+    </form>
+  </div>
+{% endif %}

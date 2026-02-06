@@ -1,0 +1,107 @@
+{% from "macros/forms.html" import select, file_upload, csrf_input %}
+{% from "macros/components.html" import button, card, alert %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Upload Form -->
+  <div class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-4">Process Document</h2>
+
+    <form
+      hx-post="/extract/process"
+      hx-target="#result"
+      hx-swap="innerHTML"
+      hx-encoding="multipart/form-data"
+      hx-indicator="#processing-indicator"
+      class="space-y-4"
+    >
+      {{ csrf_input(csrf_token) }}
+
+      {% set template_options = [] %}
+      {% for template in templates %}
+        {% set _ = template_options.append({'value': template.id, 'label': template.id | replace('_', ' ') | title}) %}
+      {% endfor %}
+
+      {{ select(
+        name='template_id',
+        options=template_options,
+        label='Extraction Template',
+        placeholder='Select a template...',
+        required=true
+      ) }}
+
+      {{ file_upload(
+        name='file',
+        accept='.jpg,.jpeg,.png,.pdf,.webp',
+        max_size_mb=10,
+        label='Document',
+        required=true
+      ) }}
+
+      <div class="flex items-center gap-3 pt-2">
+        {{ button('Process Document', type='submit') }}
+        <div id="processing-indicator" class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
+          <div class="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+          Processing...
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Results -->
+  <div id="result" class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-4">Results</h2>
+    <div class="text-center py-8 text-muted-foreground">
+      <svg class="h-12 w-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      <p>Upload a document to see extraction results</p>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Jobs -->
+{% if recent_jobs %}
+<div class="mt-8">
+  <h2 class="text-lg font-semibold mb-4">Recent Jobs</h2>
+  <div class="rounded-lg border overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-muted/50">
+        <tr>
+          <th class="px-4 py-3 text-left font-medium text-muted-foreground">Document</th>
+          <th class="px-4 py-3 text-left font-medium text-muted-foreground">Template</th>
+          <th class="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+          <th class="px-4 py-3 text-left font-medium text-muted-foreground">Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in recent_jobs %}
+        <tr class="border-t hover:bg-muted/50">
+          <td class="px-4 py-3">{{ job.filename | truncate(30) }}</td>
+          <td class="px-4 py-3">{{ job.template_name if job.template_name else 'N/A' }}</td>
+          <td class="px-4 py-3">
+            {% if job.status == 'completed' %}
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200">
+              Completed
+            </span>
+            {% elif job.status == 'processing' %}
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200">
+              Processing
+            </span>
+            {% elif job.status == 'failed' %}
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200">
+              Failed
+            </span>
+            {% else %}
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-gray-100 dark:bg-gray-900/20 text-gray-800 dark:text-gray-200">
+              {{ job.status | title }}
+            </span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-muted-foreground">{{ job.created_at | time_ago }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}

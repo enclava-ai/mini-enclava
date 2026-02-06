@@ -1,0 +1,203 @@
+{# Modal Macros for Enclava #}
+
+{# Modal Component using native <dialog> #}
+{% macro modal(id, title='', description='', size='default', class='') %}
+{%- set size_classes = {
+  'sm': 'max-w-sm',
+  'default': 'max-w-lg',
+  'lg': 'max-w-2xl',
+  'xl': 'max-w-4xl',
+  'full': 'max-w-[90vw]'
+} -%}
+<dialog
+  id="{{ id }}"
+  class="rounded-lg border bg-card text-card-foreground shadow-lg p-0 backdrop:bg-black/50 {{ size_classes[size] }} w-full {{ class }}"
+>
+  <div class="flex flex-col">
+    {# Header #}
+    <div class="flex items-center justify-between p-6 border-b">
+      <div>
+        {% if title %}
+        <h2 class="text-lg font-semibold leading-none tracking-tight">{{ title }}</h2>
+        {% endif %}
+        {% if description %}
+        <p class="text-sm text-muted-foreground mt-1">{{ description }}</p>
+        {% endif %}
+      </div>
+      <button
+        type="button"
+        onclick="closeModal('{{ id }}')"
+        class="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+        <span class="sr-only">Close</span>
+      </button>
+    </div>
+
+    {# Content #}
+    <div class="p-6">
+      {% if caller is defined %}{{ caller() }}{% endif %}
+    </div>
+  </div>
+</dialog>
+{% endmacro %}
+
+{# Modal without header - for custom content #}
+{% macro modal_raw(id, size='default', class='') %}
+{%- set size_classes = {
+  'sm': 'max-w-sm',
+  'default': 'max-w-lg',
+  'lg': 'max-w-2xl',
+  'xl': 'max-w-4xl',
+  'full': 'max-w-[90vw]'
+} -%}
+<dialog
+  id="{{ id }}"
+  class="rounded-lg border bg-card text-card-foreground shadow-lg p-0 backdrop:bg-black/50 {{ size_classes[size] }} w-full {{ class }}"
+>
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</dialog>
+{% endmacro %}
+
+{# Confirm Dialog #}
+{% macro confirm_dialog(id, title='Are you sure?', message='', confirm_text='Confirm', cancel_text='Cancel', danger=false, hx_attrs={}) %}
+<dialog
+  id="{{ id }}"
+  class="rounded-lg border bg-card text-card-foreground shadow-lg p-0 backdrop:bg-black/50 max-w-md w-full"
+>
+  <div class="p-6">
+    <div class="flex items-start gap-4">
+      {% if danger %}
+      <div class="flex-shrink-0 p-2 rounded-full bg-destructive/10 text-destructive">
+        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+      </div>
+      {% endif %}
+      <div class="flex-1">
+        <h3 class="text-lg font-semibold">{{ title }}</h3>
+        {% if message %}
+        <p class="text-sm text-muted-foreground mt-2">{{ message }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-3 mt-6">
+      <button
+        type="button"
+        onclick="closeModal('{{ id }}')"
+        class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+      >
+        {{ cancel_text }}
+      </button>
+      <button
+        type="button"
+        class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 transition-colors {% if danger %}bg-destructive text-destructive-foreground hover:bg-destructive/90{% else %}bg-primary text-primary-foreground hover:bg-primary/90{% endif %}"
+        {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+        onclick="closeModal('{{ id }}')"
+      >
+        {{ confirm_text }}
+      </button>
+    </div>
+  </div>
+</dialog>
+{% endmacro %}
+
+{# Modal Footer - for form buttons #}
+{% macro modal_footer(class='') %}
+<div class="flex justify-end gap-3 pt-4 border-t {{ class }}">
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{# Modal form - combines modal with form element #}
+{% macro modal_form(id, title='', description='', action='', method='POST', size='default', hx_attrs={}) %}
+{%- set size_classes = {
+  'sm': 'max-w-sm',
+  'default': 'max-w-lg',
+  'lg': 'max-w-2xl',
+  'xl': 'max-w-4xl'
+} -%}
+<dialog
+  id="{{ id }}"
+  class="rounded-lg border bg-card text-card-foreground shadow-lg p-0 backdrop:bg-black/50 {{ size_classes[size] }} w-full"
+>
+  <form
+    action="{{ action }}"
+    method="{{ method }}"
+    {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+  >
+    <div class="flex flex-col">
+      {# Header #}
+      <div class="flex items-center justify-between p-6 border-b">
+        <div>
+          {% if title %}
+          <h2 class="text-lg font-semibold leading-none tracking-tight">{{ title }}</h2>
+          {% endif %}
+          {% if description %}
+          <p class="text-sm text-muted-foreground mt-1">{{ description }}</p>
+          {% endif %}
+        </div>
+        <button
+          type="button"
+          onclick="closeModal('{{ id }}')"
+          class="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+          <span class="sr-only">Close</span>
+        </button>
+      </div>
+
+      {# Content #}
+      <div class="p-6">
+        {% if caller is defined %}{{ caller() }}{% endif %}
+      </div>
+    </div>
+  </form>
+</dialog>
+{% endmacro %}
+
+{# Slide-over panel (alternative to modal) #}
+{% macro slide_over(id, title='', description='', position='right', class='') %}
+{%- set position_classes = {
+  'right': 'right-0 h-full w-full max-w-md translate-x-full open:translate-x-0',
+  'left': 'left-0 h-full w-full max-w-md -translate-x-full open:translate-x-0',
+  'bottom': 'bottom-0 left-0 right-0 max-h-[90vh] translate-y-full open:translate-y-0'
+} -%}
+<dialog
+  id="{{ id }}"
+  class="fixed m-0 p-0 border-0 bg-card text-card-foreground shadow-xl backdrop:bg-black/50 transition-transform duration-300 {{ position_classes[position] }} {{ class }}"
+>
+  <div class="flex flex-col h-full">
+    {# Header #}
+    <div class="flex items-center justify-between p-6 border-b">
+      <div>
+        {% if title %}
+        <h2 class="text-lg font-semibold">{{ title }}</h2>
+        {% endif %}
+        {% if description %}
+        <p class="text-sm text-muted-foreground mt-1">{{ description }}</p>
+        {% endif %}
+      </div>
+      <button
+        type="button"
+        onclick="closeModal('{{ id }}')"
+        class="rounded-sm opacity-70 hover:opacity-100"
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    {# Content #}
+    <div class="flex-1 overflow-y-auto p-6">
+      {% if caller is defined %}{{ caller() }}{% endif %}
+    </div>
+  </div>
+</dialog>
+{% endmacro %}
