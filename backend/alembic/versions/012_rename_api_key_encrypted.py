@@ -10,6 +10,7 @@ Users will need to re-enter their API keys after this migration.
 """
 
 from alembic import op
+from app.db.migrations import is_sqlite
 
 
 # revision identifiers
@@ -21,12 +22,15 @@ depends_on = None
 
 def upgrade() -> None:
     """Rename api_key_encrypted to api_key and clear existing encrypted values."""
-    # Rename the column
-    op.alter_column(
-        'mcp_servers',
-        'api_key_encrypted',
-        new_column_name='api_key'
-    )
+    if is_sqlite():
+        with op.batch_alter_table('mcp_servers') as batch_op:
+            batch_op.alter_column('api_key_encrypted', new_column_name='api_key')
+    else:
+        op.alter_column(
+            'mcp_servers',
+            'api_key_encrypted',
+            new_column_name='api_key'
+        )
 
     # Clear existing values since they were encrypted and are no longer usable
     op.execute("UPDATE mcp_servers SET api_key = NULL")
@@ -37,8 +41,12 @@ def downgrade() -> None:
     # Clear values first since plaintext keys shouldn't be "encrypted" column
     op.execute("UPDATE mcp_servers SET api_key = NULL")
 
-    op.alter_column(
-        'mcp_servers',
-        'api_key',
-        new_column_name='api_key_encrypted'
-    )
+    if is_sqlite():
+        with op.batch_alter_table('mcp_servers') as batch_op:
+            batch_op.alter_column('api_key', new_column_name='api_key_encrypted')
+    else:
+        op.alter_column(
+            'mcp_servers',
+            'api_key',
+            new_column_name='api_key_encrypted'
+        )

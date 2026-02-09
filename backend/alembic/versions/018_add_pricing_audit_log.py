@@ -10,7 +10,7 @@ Create Date: 2025-01-15
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from app.db.migrations import is_postgresql, uuid_column, jsonb_column, create_index
 
 
 # revision identifiers, used by Alembic.
@@ -52,8 +52,8 @@ def upgrade():
 
         # Additional context
         sa.Column('change_reason', sa.Text(), nullable=True),
-        sa.Column('sync_job_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('api_response_snapshot', postgresql.JSONB(), nullable=True),
+        sa.Column('sync_job_id', uuid_column(), nullable=True),
+        sa.Column('api_response_snapshot', jsonb_column(), nullable=True),
 
         # Timestamps
         sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
@@ -63,19 +63,23 @@ def upgrade():
     )
 
     # Create indexes for pricing_audit_log
-    op.create_index(
+    # Note: postgresql_ops is only used on PostgreSQL
+    create_index(
         'idx_pricing_audit_log_provider_model',
         'pricing_audit_log',
         ['provider_id', 'model_id', 'created_at'],
         postgresql_ops={'created_at': 'DESC'},
     )
 
-    # Partial index for queries by user
-    op.execute("""
-        CREATE INDEX idx_pricing_audit_log_changed_by
-        ON pricing_audit_log(changed_by_user_id)
-        WHERE changed_by_user_id IS NOT NULL
-    """)
+    # Partial index for queries by user (PostgreSQL only)
+    if is_postgresql():
+        op.execute("""
+            CREATE INDEX idx_pricing_audit_log_changed_by
+            ON pricing_audit_log(changed_by_user_id)
+            WHERE changed_by_user_id IS NOT NULL
+        """)
+    else:
+        op.create_index('idx_pricing_audit_log_changed_by', 'pricing_audit_log', ['changed_by_user_id'])
 
     # Index for sync job queries
     op.create_index(
@@ -90,7 +94,10 @@ def downgrade():
 
     # Drop indexes
     op.drop_index('idx_pricing_audit_log_sync_job', table_name='pricing_audit_log')
-    op.execute("DROP INDEX IF EXISTS idx_pricing_audit_log_changed_by")
+    try:
+        op.drop_index('idx_pricing_audit_log_changed_by', table_name='pricing_audit_log')
+    except Exception:
+        pass
     op.drop_index('idx_pricing_audit_log_provider_model', table_name='pricing_audit_log')
 
     # Drop table

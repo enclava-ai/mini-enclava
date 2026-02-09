@@ -7,6 +7,7 @@ Create Date: 2025-01-30 00:00:02.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 # revision identifiers
 revision = '003_add_notifications_tables'
@@ -62,7 +63,7 @@ def upgrade():
     op.create_index(op.f('ix_notification_channels_id'), 'notification_channels', ['id'], unique=False)
     op.create_index(op.f('ix_notification_channels_name'), 'notification_channels', ['name'], unique=False)
 
-    # Create notifications table
+    # Create notifications table (FKs included in create_table for SQLite compat)
     op.create_table(
         'notifications',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -91,31 +92,21 @@ def upgrade():
         sa.Column('tags', sa.JSON(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(['template_id'], ['notification_templates.id'], ondelete='SET NULL'),
+        sa.ForeignKeyConstraint(['channel_id'], ['notification_channels.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_notifications_id'), 'notifications', ['id'], unique=False)
     op.create_index(op.f('ix_notifications_status'), 'notifications', ['status'], unique=False)
     op.create_index(op.f('ix_notifications_scheduled_at'), 'notifications', ['scheduled_at'], unique=False)
 
-    # Add foreign key constraints
-    op.create_foreign_key(
-        'fk_notifications_template_id', 'notifications', 'notification_templates',
-        ['template_id'], ['id'], ondelete='SET NULL'
-    )
-    op.create_foreign_key(
-        'fk_notifications_channel_id', 'notifications', 'notification_channels',
-        ['channel_id'], ['id'], ondelete='CASCADE'
-    )
-    op.create_foreign_key(
-        'fk_notifications_user_id', 'notifications', 'users',
-        ['user_id'], ['id'], ondelete='SET NULL'
-    )
-
 def downgrade():
     # Drop notifications table
-    op.drop_constraint('fk_notifications_user_id', table_name='notifications', type_='foreignkey')
-    op.drop_constraint('fk_notifications_channel_id', table_name='notifications', type_='foreignkey')
-    op.drop_constraint('fk_notifications_template_id', table_name='notifications', type_='foreignkey')
+    if not is_sqlite():
+        op.drop_constraint('fk_notifications_user_id', table_name='notifications', type_='foreignkey')
+        op.drop_constraint('fk_notifications_channel_id', table_name='notifications', type_='foreignkey')
+        op.drop_constraint('fk_notifications_template_id', table_name='notifications', type_='foreignkey')
     op.drop_index(op.f('ix_notifications_scheduled_at'), table_name='notifications')
     op.drop_index(op.f('ix_notifications_status'), table_name='notifications')
     op.drop_index(op.f('ix_notifications_id'), table_name='notifications')

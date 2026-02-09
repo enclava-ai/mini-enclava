@@ -10,6 +10,7 @@ float precision issues. Now storing as actual float value (0.0 to 1.0).
 
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 
 # revision identifiers, used by Alembic.
@@ -29,14 +30,21 @@ def upgrade() -> None:
     # Step 3: Drop the old column
     op.drop_column('agent_configs', 'temperature')
 
-    # Step 4: Rename new column to temperature
-    op.alter_column('agent_configs', 'temperature_new', new_column_name='temperature')
-
-    # Step 5: Set NOT NULL and default
-    op.alter_column('agent_configs', 'temperature',
-                    existing_type=sa.Float(),
-                    nullable=False,
-                    server_default='0.7')
+    # Step 4: Rename new column to temperature and set constraints
+    if is_sqlite():
+        with op.batch_alter_table('agent_configs') as batch_op:
+            batch_op.alter_column('temperature_new', new_column_name='temperature')
+        with op.batch_alter_table('agent_configs') as batch_op:
+            batch_op.alter_column('temperature',
+                                  existing_type=sa.Float(),
+                                  nullable=False,
+                                  server_default='0.7')
+    else:
+        op.alter_column('agent_configs', 'temperature_new', new_column_name='temperature')
+        op.alter_column('agent_configs', 'temperature',
+                        existing_type=sa.Float(),
+                        nullable=False,
+                        server_default='0.7')
 
 
 def downgrade() -> None:
@@ -49,11 +57,18 @@ def downgrade() -> None:
     # Step 3: Drop the Float column
     op.drop_column('agent_configs', 'temperature')
 
-    # Step 4: Rename old column back
-    op.alter_column('agent_configs', 'temperature_old', new_column_name='temperature')
-
-    # Step 5: Set NOT NULL and default
-    op.alter_column('agent_configs', 'temperature',
-                    existing_type=sa.Integer(),
-                    nullable=False,
-                    server_default='7')
+    # Step 4: Rename old column back and set constraints
+    if is_sqlite():
+        with op.batch_alter_table('agent_configs') as batch_op:
+            batch_op.alter_column('temperature_old', new_column_name='temperature')
+        with op.batch_alter_table('agent_configs') as batch_op:
+            batch_op.alter_column('temperature',
+                                  existing_type=sa.Integer(),
+                                  nullable=False,
+                                  server_default='7')
+    else:
+        op.alter_column('agent_configs', 'temperature_old', new_column_name='temperature')
+        op.alter_column('agent_configs', 'temperature',
+                        existing_type=sa.Integer(),
+                        nullable=False,
+                        server_default='7')

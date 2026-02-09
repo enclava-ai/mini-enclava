@@ -20,10 +20,10 @@ from sqlalchemy import (
     Text,
     ForeignKey,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base, utc_now
+from app.db.types import GUID, JSONB
 
 
 class ProviderPricing(Base):
@@ -257,7 +257,7 @@ class PricingAuditLog(Base):
 
     # Additional context
     change_reason = Column(Text, nullable=True)
-    sync_job_id = Column(PGUUID(as_uuid=True), nullable=True)
+    sync_job_id = Column(GUID, nullable=True)
     api_response_snapshot = Column(JSONB, nullable=True)
 
     # Timestamps

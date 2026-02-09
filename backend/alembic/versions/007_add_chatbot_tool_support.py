@@ -7,6 +7,7 @@ Create Date: 2024-12-16 16:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 
 # revision identifiers, used by Alembic.
@@ -17,18 +18,17 @@ depends_on = None
 
 
 def upgrade():
-    """Add tool-related columns to chatbot_messages table.
-
-    Changes:
-    1. Make content column nullable (tool-call messages may have no text content)
-    2. Add tool_calls column for assistant messages with tool calls
-    3. Add tool_call_id column for tool response messages
-    4. Add tool_name column to track which tool was called
-    """
+    """Add tool-related columns to chatbot_messages table."""
     # Make content nullable (required for tool-call messages with no text)
-    op.alter_column('chatbot_messages', 'content',
-                    existing_type=sa.Text(),
-                    nullable=True)
+    if is_sqlite():
+        with op.batch_alter_table('chatbot_messages') as batch_op:
+            batch_op.alter_column('content',
+                                  existing_type=sa.Text(),
+                                  nullable=True)
+    else:
+        op.alter_column('chatbot_messages', 'content',
+                        existing_type=sa.Text(),
+                        nullable=True)
 
     # Add tool-related columns
     op.add_column('chatbot_messages', sa.Column('tool_calls', sa.JSON(), nullable=True))
@@ -44,7 +44,12 @@ def downgrade():
     op.drop_column('chatbot_messages', 'tool_calls')
 
     # Restore NOT NULL constraint on content
-    # WARNING: This may fail if NULL values exist in the content column
-    op.alter_column('chatbot_messages', 'content',
-                    existing_type=sa.Text(),
-                    nullable=False)
+    if is_sqlite():
+        with op.batch_alter_table('chatbot_messages') as batch_op:
+            batch_op.alter_column('content',
+                                  existing_type=sa.Text(),
+                                  nullable=False)
+    else:
+        op.alter_column('chatbot_messages', 'content',
+                        existing_type=sa.Text(),
+                        nullable=False)

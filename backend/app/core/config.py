@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL")
 
     # Redis
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
+    REDIS_ENABLED: bool = True  # Set to false to disable Redis (degrades gracefully)
+    REDIS_URL: Optional[str] = os.getenv("REDIS_URL", "redis://localhost:6379")
 
     # Security
     JWT_SECRET: str = os.getenv("JWT_SECRET")
@@ -114,10 +115,6 @@ class Settings(BaseSettings):
     ATTESTATION_VERIFICATION_INTERVAL_SECONDS: int = int(
         os.getenv("ATTESTATION_VERIFICATION_INTERVAL_SECONDS", "300")
     )  # 5 minutes
-
-    # Skip attestation verification (for development/mini-enclava)
-    # WARNING: Only use in development! Disables TEE attestation checks.
-    SKIP_ATTESTATION_CHECK: bool = os.getenv("SKIP_ATTESTATION_CHECK", "false").lower() == "true"
 
     # Qdrant
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
@@ -218,8 +215,49 @@ class Settings(BaseSettings):
     )
 
     # Monitoring
-    PROMETHEUS_ENABLED: bool = os.getenv("PROMETHEUS_ENABLED", "True").lower() == "true"
+    PROMETHEUS_ENABLED: bool = True
     PROMETHEUS_PORT: int = int(os.getenv("PROMETHEUS_PORT", "9090"))
+
+    # =============================================================================
+    # FEATURE FLAGS - Control optional components
+    # =============================================================================
+
+    # RAG (Retrieval Augmented Generation) - requires Qdrant
+    # Set to false to disable document upload, processing, and vector search
+    RAG_ENABLED: bool = True
+
+    # Chatbot module
+    # Set to false to disable chatbot creation and chat endpoints
+    CHATBOTS_ENABLED: bool = True
+
+    # Agent module
+    # Set to false to disable agent creation and agent chat endpoints
+    AGENTS_ENABLED: bool = True
+
+    # Extract module
+    # Set to false to disable document extraction endpoints
+    EXTRACT_ENABLED: bool = True
+
+    # Audit logging - background worker that logs user actions
+    # Set to false to disable audit trail (reduces background processing)
+    AUDIT_ENABLED: bool = True
+
+    # Analytics service - tracks usage metrics
+    # Set to false to disable analytics collection and middleware
+    ANALYTICS_ENABLED: bool = True
+
+    # Plugin system - auto-discovery and loading of plugins
+    # Set to false to disable plugin scanning and execution
+    PLUGINS_ENABLED: bool = True
+
+    # Built-in tools for agents (RAG search, web search)
+    # Set to false to disable tool registration (agents won't have tools)
+    BUILTIN_TOOLS_ENABLED: bool = True
+
+    # Modules to explicitly disable (comma-separated list)
+    # Example: MODULES_DISABLED=rag,agent
+    # This prevents modules from being loaded even if present in modules directory
+    MODULES_DISABLED: str = ""
 
     # Alerting Configuration
     ALERT_EMAIL_ENABLED: bool = os.getenv("ALERT_EMAIL_ENABLED", "False").lower() == "true"
@@ -278,6 +316,20 @@ class Settings(BaseSettings):
     # Logging
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "json")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
+    @field_validator(
+        'REDIS_ENABLED', 'RAG_ENABLED', 'CHATBOTS_ENABLED', 'AGENTS_ENABLED', 'EXTRACT_ENABLED',
+        'AUDIT_ENABLED', 'ANALYTICS_ENABLED', 'PLUGINS_ENABLED',
+        'BUILTIN_TOOLS_ENABLED', 'PROMETHEUS_ENABLED',
+        mode='before'
+    )
+    @classmethod
+    def parse_bool(cls, v):
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.lower() in ('true', '1', 'yes')
+        return bool(v)
 
     model_config = {
         "env_file": ".env",
@@ -368,6 +420,48 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Security validation failed. See above errors. "
                 "Fix the configuration before starting the application."
+            )
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_database_config(self) -> "Settings":
+        """
+        Validate database configuration and enforce SQLite restrictions.
+
+        SQLite restrictions:
+        - PLUGINS_ENABLED: Must be false (schema isolation requires PostgreSQL)
+        - RAG_ENABLED: Allowed (DB tables work), but vector search requires Qdrant
+
+        Note: RAG tables are SQLite-compatible. The limitation is Qdrant for
+        vector similarity search, not the database. We allow RAG_ENABLED=true
+        but the RAG service should check for Qdrant availability.
+        """
+        is_sqlite = self.DATABASE_URL and self.DATABASE_URL.startswith("sqlite")
+
+        if is_sqlite:
+            # Plugin schema isolation requires PostgreSQL - must disable
+            if self.PLUGINS_ENABLED:
+                print(
+                    "\033[93m[SQLite] Plugin database isolation requires PostgreSQL schemas. "
+                    "Forcing PLUGINS_ENABLED=false\033[0m",
+                    file=sys.stderr
+                )
+                object.__setattr__(self, 'PLUGINS_ENABLED', False)
+
+            # RAG tables work on SQLite, but warn about Qdrant requirement
+            if self.RAG_ENABLED:
+                print(
+                    "\033[93m[SQLite] RAG enabled but vector search requires Qdrant. "
+                    "Document storage will work; semantic search requires QDRANT_URL.\033[0m",
+                    file=sys.stderr
+                )
+
+            # Log SQLite mode
+            print(
+                "\033[94m[SQLite] Running in SQLite mode. "
+                "Some features may be limited.\033[0m",
+                file=sys.stderr
             )
 
         return self

@@ -2,17 +2,19 @@
 Database connection and session management
 
 This module manages database connections with optimized pool settings:
-- Primary async pool (asyncpg): 30 + 50 overflow = 80 max connections
-- Legacy sync pool (psycopg2): 5 + 10 overflow = 15 max connections
-- Total: 95 max connections (under PostgreSQL default of 100)
+- PostgreSQL: Primary async pool (asyncpg): 30 + 50 overflow = 80 max connections
+              Legacy sync pool (psycopg2): 5 + 10 overflow = 15 max connections
+              Total: 95 max connections (under PostgreSQL default of 100)
+- SQLite: StaticPool for single-connection access with foreign key support
 
-Pool monitoring is available via get_pool_status() function.
+Pool monitoring is available via get_pool_status() function (PostgreSQL only).
 """
 
 import logging
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Dict, Any
 from sqlalchemy import create_engine, MetaData, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -21,6 +23,56 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Dialect Detection
+# ============================================================================
+
+def _is_sqlite() -> bool:
+    """Check if using SQLite backend."""
+    return settings.DATABASE_URL and settings.DATABASE_URL.startswith("sqlite")
+
+
+def _is_postgresql() -> bool:
+    """Check if using PostgreSQL backend."""
+    return not _is_sqlite()
+
+
+# ============================================================================
+# SQLite PRAGMA Configuration
+# ============================================================================
+
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    """Enable foreign key enforcement for SQLite."""
+    conn_type = str(type(dbapi_connection))
+    if 'sqlite' in conn_type.lower():
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+
+# ============================================================================
+# Dialect-aware Table Existence Helpers
+# ============================================================================
+
+def _sql_table_exists(table_name: str) -> str:
+    """Generate table existence check SQL."""
+    if _is_sqlite():
+        return f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'"
+    return f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}')"
+
+
+def _parse_table_exists(result) -> bool:
+    """Parse table existence check result."""
+    if _is_sqlite():
+        return result.scalar() is not None
+    return bool(result.scalar())
+
+
+# ============================================================================
+# Engine Factories
+# ============================================================================
 
 # Pool metrics tracking
 _pool_metrics = {
@@ -32,52 +84,98 @@ _pool_metrics = {
     "sync_overflow": 0,
 }
 
-# Create async engine with optimized connection pooling
-# This is the PRIMARY engine - most operations should use async sessions
-# Pool sizing: 30 base + 50 overflow = 80 max connections
-# Note: PostgreSQL default max_connections=100, leave headroom for admin/monitoring
-engine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
-    echo=settings.APP_DEBUG,
-    future=True,
-    pool_pre_ping=True,
-    pool_size=30,  # Base pool size for steady-state operations
-    max_overflow=50,  # Burst capacity for high load
-    pool_recycle=3600,  # Recycle connections every hour
-    pool_timeout=30,  # Max time to get connection from pool
-    connect_args={
-        "timeout": 5,
-        "command_timeout": 5,
-        "server_settings": {
-            "application_name": "enclava_backend",
+
+def _create_postgresql_engines():
+    """Create PostgreSQL engines with optimized connection pooling."""
+    # Create async engine with optimized connection pooling
+    # This is the PRIMARY engine - most operations should use async sessions
+    # Pool sizing: 30 base + 50 overflow = 80 max connections
+    # Note: PostgreSQL default max_connections=100, leave headroom for admin/monitoring
+    async_engine = create_async_engine(
+        settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+        echo=settings.APP_DEBUG,
+        future=True,
+        pool_pre_ping=True,
+        pool_size=30,  # Base pool size for steady-state operations
+        max_overflow=50,  # Burst capacity for high load
+        pool_recycle=3600,  # Recycle connections every hour
+        pool_timeout=30,  # Max time to get connection from pool
+        connect_args={
+            "timeout": 5,
+            "command_timeout": 5,
+            "server_settings": {
+                "application_name": "enclava_backend",
+            },
         },
-    },
-)
+    )
+
+    # Create synchronous engine for legacy code paths and startup operations
+    # IMPORTANT: This pool should be MINIMAL - prefer async operations for all new code
+    # Most budget enforcement, chatbot, and API operations now use async sessions
+    # Pool sizing: 5 base + 10 overflow = 15 max connections
+    sync_engine = create_engine(
+        settings.DATABASE_URL,
+        echo=settings.APP_DEBUG,
+        future=True,
+        pool_pre_ping=True,
+        pool_size=5,  # Minimal - only for startup/migrations/legacy paths
+        max_overflow=10,  # Small burst for edge cases
+        pool_recycle=3600,  # Recycle connections every hour
+        pool_timeout=30,  # Max time to get connection from pool
+        connect_args={
+            "connect_timeout": 5,
+            "application_name": "enclava_backend_sync",
+        },
+    )
+
+    logger.info("Database: PostgreSQL")
+    return async_engine, sync_engine
+
+
+def _create_sqlite_engines():
+    """Create SQLite engines."""
+    db_url = settings.DATABASE_URL
+    if db_url.startswith("sqlite:///"):
+        db_path = db_url[10:]
+    else:
+        db_path = "./data/enclava.db"
+
+    async_url = f"sqlite+aiosqlite:///{db_path}"
+
+    async_engine = create_async_engine(
+        async_url,
+        echo=settings.APP_DEBUG,
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    sync_engine = create_engine(
+        db_url,
+        echo=settings.APP_DEBUG,
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    logger.info(f"Database: SQLite ({db_path})")
+    return async_engine, sync_engine
+
+
+# ============================================================================
+# Engine Creation
+# ============================================================================
+
+if _is_sqlite():
+    engine, sync_engine = _create_sqlite_engines()
+else:
+    engine, sync_engine = _create_postgresql_engines()
 
 # Create async session factory
 async_session_factory = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
-)
-
-# Create synchronous engine for legacy code paths and startup operations
-# IMPORTANT: This pool should be MINIMAL - prefer async operations for all new code
-# Most budget enforcement, chatbot, and API operations now use async sessions
-# Pool sizing: 5 base + 10 overflow = 15 max connections
-sync_engine = create_engine(
-    settings.DATABASE_URL,
-    echo=settings.APP_DEBUG,
-    future=True,
-    pool_pre_ping=True,
-    pool_size=5,  # Minimal - only for startup/migrations/legacy paths
-    max_overflow=10,  # Small burst for edge cases
-    pool_recycle=3600,  # Recycle connections every hour
-    pool_timeout=30,  # Max time to get connection from pool
-    connect_args={
-        "connect_timeout": 5,
-        "application_name": "enclava_backend_sync",
-    },
 )
 
 # Create sync session factory
@@ -106,11 +204,11 @@ def utc_now() -> datetime:
 
 
 # ============================================================================
-# Pool Monitoring
+# Pool Monitoring (PostgreSQL only)
 # ============================================================================
 
 def _setup_pool_monitoring():
-    """Set up event listeners for pool monitoring"""
+    """Set up event listeners for pool monitoring (PostgreSQL only)"""
 
     # Sync engine pool events
     @event.listens_for(sync_engine, "checkout")
@@ -153,6 +251,12 @@ def get_pool_status() -> Dict[str, Any]:
     Returns:
         Dict containing pool statistics for both async and sync engines
     """
+    if _is_sqlite():
+        return {
+            "backend": "sqlite",
+            "message": "Pool monitoring not applicable for SQLite (uses StaticPool)",
+        }
+
     try:
         # Get async pool status
         async_pool = engine.sync_engine.pool
@@ -180,6 +284,7 @@ def get_pool_status() -> Dict[str, Any]:
         sync_status = {"error": str(e)}
 
     return {
+        "backend": "postgresql",
         "async_pool": async_status,
         "sync_pool": sync_status,
         "metrics": _pool_metrics.copy(),
@@ -201,8 +306,9 @@ def log_pool_status():
     logger.info(f"Database pool status: {status}")
 
 
-# Initialize pool monitoring
-_setup_pool_monitoring()
+# Initialize pool monitoring (PostgreSQL only)
+if _is_postgresql():
+    _setup_pool_monitoring()
 
 # Metadata for migrations
 metadata = MetaData()
@@ -283,11 +389,9 @@ async def create_default_roles():
     try:
         async with async_session_factory() as session:
             # Check if the roles table exists first
-            check_table = text(
-                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'roles')"
-            )
+            check_table = text(_sql_table_exists('roles'))
             result = await session.execute(check_table)
-            table_exists = result.scalar()
+            table_exists = _parse_table_exists(result)
 
             if not table_exists:
                 logger.warning("Roles table does not exist yet - waiting for migrations")
@@ -342,14 +446,16 @@ async def create_default_admin():
 
         async with async_session_factory() as session:
             # Check if required tables exist first
-            check_tables = text(
-                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users') "
-                "AND EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'roles')"
-            )
-            result = await session.execute(check_tables)
-            tables_exist = result.scalar()
+            check_users = text(_sql_table_exists('users'))
+            check_roles = text(_sql_table_exists('roles'))
 
-            if not tables_exist:
+            result_users = await session.execute(check_users)
+            result_roles = await session.execute(check_roles)
+
+            users_exist = _parse_table_exists(result_users)
+            roles_exist = _parse_table_exists(result_roles)
+
+            if not users_exist or not roles_exist:
                 logger.warning("Users/roles tables do not exist yet - waiting for migrations")
                 return
 

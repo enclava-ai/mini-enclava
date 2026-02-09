@@ -7,6 +7,7 @@ Create Date: 2026-01-23
 
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_postgresql, timestamp_default
 
 
 # revision identifiers, used by Alembic.
@@ -33,7 +34,7 @@ def upgrade():
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=timestamp_default(),
             nullable=True,
         ),
         sa.Column(
@@ -44,13 +45,23 @@ def upgrade():
     )
 
     # Insert settings row with null default_model (will be populated from available models)
-    op.execute(
-        """
-        INSERT INTO extract_settings (id, default_model)
-        VALUES (1, NULL)
-        ON CONFLICT (id) DO NOTHING
-        """
-    )
+    # Use dialect-appropriate syntax for upsert
+    if is_postgresql():
+        op.execute(
+            """
+            INSERT INTO extract_settings (id, default_model)
+            VALUES (1, NULL)
+            ON CONFLICT (id) DO NOTHING
+            """
+        )
+    else:
+        # SQLite syntax
+        op.execute(
+            """
+            INSERT OR IGNORE INTO extract_settings (id, default_model)
+            VALUES (1, NULL)
+            """
+        )
 
 
 def downgrade():

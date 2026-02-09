@@ -10,7 +10,7 @@ Create Date: 2025-01-16
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import ARRAY
+from app.db.migrations import is_postgresql, string_array_column
 
 
 # revision identifiers, used by Alembic.
@@ -29,16 +29,29 @@ def upgrade():
         sa.Column('preferred_provider_id', sa.String(length=50), nullable=True)
     )
 
-    # Add allowed_providers column (array of provider IDs)
-    op.add_column(
-        'chatbot_instances',
-        sa.Column(
-            'allowed_providers',
-            ARRAY(sa.String(length=50)),
-            nullable=True,
-            server_default=sa.text("ARRAY[]::VARCHAR[]")
+    # Add allowed_providers column (array on PostgreSQL, JSON text on SQLite)
+    if is_postgresql():
+        from sqlalchemy.dialects.postgresql import ARRAY
+        op.add_column(
+            'chatbot_instances',
+            sa.Column(
+                'allowed_providers',
+                ARRAY(sa.String(length=50)),
+                nullable=True,
+                server_default=sa.text("ARRAY[]::VARCHAR[]")
+            )
         )
-    )
+    else:
+        # SQLite: use Text with JSON serialization, default to empty JSON array
+        op.add_column(
+            'chatbot_instances',
+            sa.Column(
+                'allowed_providers',
+                sa.Text(),
+                nullable=True,
+                server_default='[]'
+            )
+        )
 
     # Create index for querying by preferred provider
     op.create_index(

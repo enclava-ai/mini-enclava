@@ -9,6 +9,7 @@ the hack of using chatbot tables for agent chats.
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import timestamp_default
 
 # revision identifiers, used by Alembic.
 revision = '015_agent_conversations'
@@ -25,8 +26,8 @@ def upgrade():
         sa.Column('agent_config_id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.String(length=50), nullable=False),
         sa.Column('title', sa.String(length=255), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.text('now()')),
-        sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.text('now()')),
+        sa.Column('created_at', sa.DateTime(), nullable=False, server_default=timestamp_default()),
+        sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=timestamp_default()),
         sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
         sa.Column('context_data', sa.JSON(), nullable=True),
         sa.ForeignKeyConstraint(['agent_config_id'], ['agent_configs.id'], ),
@@ -50,7 +51,7 @@ def upgrade():
         sa.Column('tool_calls', sa.JSON(), nullable=True),
         sa.Column('tool_call_id', sa.String(length=100), nullable=True),
         sa.Column('tool_name', sa.String(length=100), nullable=True),
-        sa.Column('timestamp', sa.DateTime(), nullable=False, server_default=sa.text('now()')),
+        sa.Column('timestamp', sa.DateTime(), nullable=False, server_default=timestamp_default()),
         sa.Column('message_metadata', sa.JSON(), nullable=True),
         sa.Column('sources', sa.JSON(), nullable=True),
         sa.ForeignKeyConstraint(['conversation_id'], ['agent_conversations.id'], ondelete='CASCADE'),

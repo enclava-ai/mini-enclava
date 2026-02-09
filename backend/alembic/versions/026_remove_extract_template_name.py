@@ -7,6 +7,7 @@ Create Date: 2026-01-22
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 
 # revision identifiers, used by Alembic.
@@ -30,4 +31,8 @@ def downgrade():
     # Update existing rows to use id as name
     op.execute("UPDATE extract_templates SET name = id WHERE name = ''")
     # Remove server default
-    op.alter_column('extract_templates', 'name', server_default=None)
+    if is_sqlite():
+        with op.batch_alter_table('extract_templates') as batch_op:
+            batch_op.alter_column('name', server_default=None)
+    else:
+        op.alter_column('extract_templates', 'name', server_default=None)

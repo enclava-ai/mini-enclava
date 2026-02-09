@@ -7,8 +7,8 @@ Create Date: 2026-01-23
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 import json
+from app.db.migrations import is_postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -16,6 +16,22 @@ revision = '030_update_extract_scopes'
 down_revision = '029_add_extract_model_settings'
 branch_labels = None
 depends_on = None
+
+
+def _update_scopes(conn, api_key_id, new_scopes):
+    """Update scopes using dialect-appropriate JSON syntax."""
+    scopes_json = json.dumps(new_scopes)
+    if is_postgresql():
+        conn.execute(
+            sa.text("UPDATE api_keys SET scopes = CAST(:scopes AS JSON) WHERE id = :id"),
+            {"scopes": scopes_json, "id": api_key_id}
+        )
+    else:
+        # SQLite: JSON is stored as text, no cast needed
+        conn.execute(
+            sa.text("UPDATE api_keys SET scopes = json(:scopes) WHERE id = :id"),
+            {"scopes": scopes_json, "id": api_key_id}
+        )
 
 
 def upgrade():
@@ -47,11 +63,7 @@ def upgrade():
             if 'extract' not in new_scopes:
                 new_scopes.append('extract')
 
-            # Update the API key (PostgreSQL requires JSON to be a string)
-            conn.execute(
-                sa.text("UPDATE api_keys SET scopes = CAST(:scopes AS JSON) WHERE id = :id"),
-                {"scopes": json.dumps(new_scopes), "id": api_key_id}
-            )
+            _update_scopes(conn, api_key_id, new_scopes)
 
 
 def downgrade():
@@ -80,8 +92,4 @@ def downgrade():
                 if scope not in new_scopes:
                     new_scopes.append(scope)
 
-            # Update the API key (PostgreSQL requires JSON to be a string)
-            conn.execute(
-                sa.text("UPDATE api_keys SET scopes = CAST(:scopes AS JSON) WHERE id = :id"),
-                {"scopes": json.dumps(new_scopes), "id": api_key_id}
-            )
+            _update_scopes(conn, api_key_id, new_scopes)

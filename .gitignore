@@ -62,9 +62,12 @@ backend/app/services/llm/__pycache__/
 backend/app/services/llm/providers/__pycache__/
 backend/app/utils/__pycache__/
 backend/modules/rag/__pycache__/
-frontend/.next/ 
+frontend/.next/
 frontend/node_modules/
 node_modules/
+
+# Compiled Tailwind CSS (generated from input.css)
+backend/app/static/css/tailwind.css
 venv/
 venv_memory_monitor/
 to_delete/

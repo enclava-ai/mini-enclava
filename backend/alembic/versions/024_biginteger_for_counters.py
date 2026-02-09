@@ -16,6 +16,7 @@ Create Date: 2026-01-19
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 
 # revision identifiers, used by Alembic.
@@ -27,6 +28,9 @@ depends_on = None
 
 def upgrade():
     """Change Integer columns to BigInteger for counter fields."""
+    # SQLite INTEGER is already 64-bit, no type change needed
+    if is_sqlite():
+        return
 
     # Budget table - limit and usage counters
     op.alter_column(
@@ -110,6 +114,9 @@ def downgrade():
 
     WARNING: This may cause data loss if values exceed Integer range.
     """
+    # SQLite INTEGER is already 64-bit, no type change needed
+    if is_sqlite():
+        return
 
     # Usage Tracking table
     op.alter_column(

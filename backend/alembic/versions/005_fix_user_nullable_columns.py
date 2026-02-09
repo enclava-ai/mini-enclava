@@ -7,6 +7,7 @@ Create Date: 2025-11-20 08:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 
 # revision identifiers, used by Alembic.
@@ -42,38 +43,67 @@ def upgrade() -> None:
     )
 
     # Now alter columns to NOT NULL with server defaults
-    # Note: PostgreSQL syntax
-    op.alter_column('users', 'account_locked',
-                    existing_type=sa.Boolean(),
-                    nullable=False,
-                    server_default=sa.false())
+    if is_sqlite():
+        with op.batch_alter_table('users') as batch_op:
+            batch_op.alter_column('account_locked',
+                                  existing_type=sa.Boolean(),
+                                  nullable=False,
+                                  server_default=sa.false())
+            batch_op.alter_column('failed_login_attempts',
+                                  existing_type=sa.Integer(),
+                                  nullable=False,
+                                  server_default='0')
+            batch_op.alter_column('custom_permissions',
+                                  existing_type=sa.JSON(),
+                                  nullable=False,
+                                  server_default='{}')
+    else:
+        op.alter_column('users', 'account_locked',
+                        existing_type=sa.Boolean(),
+                        nullable=False,
+                        server_default=sa.false())
 
-    op.alter_column('users', 'failed_login_attempts',
-                    existing_type=sa.Integer(),
-                    nullable=False,
-                    server_default='0')
+        op.alter_column('users', 'failed_login_attempts',
+                        existing_type=sa.Integer(),
+                        nullable=False,
+                        server_default='0')
 
-    op.alter_column('users', 'custom_permissions',
-                    existing_type=sa.JSON(),
-                    nullable=False,
-                    server_default='{}')
+        op.alter_column('users', 'custom_permissions',
+                        existing_type=sa.JSON(),
+                        nullable=False,
+                        server_default='{}')
 
 
 def downgrade() -> None:
     """
     Revert columns to nullable (original state from fd999a559a35)
     """
-    op.alter_column('users', 'account_locked',
-                    existing_type=sa.Boolean(),
-                    nullable=True,
-                    server_default=None)
+    if is_sqlite():
+        with op.batch_alter_table('users') as batch_op:
+            batch_op.alter_column('account_locked',
+                                  existing_type=sa.Boolean(),
+                                  nullable=True,
+                                  server_default=None)
+            batch_op.alter_column('failed_login_attempts',
+                                  existing_type=sa.Integer(),
+                                  nullable=True,
+                                  server_default=None)
+            batch_op.alter_column('custom_permissions',
+                                  existing_type=sa.JSON(),
+                                  nullable=True,
+                                  server_default=None)
+    else:
+        op.alter_column('users', 'account_locked',
+                        existing_type=sa.Boolean(),
+                        nullable=True,
+                        server_default=None)
 
-    op.alter_column('users', 'failed_login_attempts',
-                    existing_type=sa.Integer(),
-                    nullable=True,
-                    server_default=None)
+        op.alter_column('users', 'failed_login_attempts',
+                        existing_type=sa.Integer(),
+                        nullable=True,
+                        server_default=None)
 
-    op.alter_column('users', 'custom_permissions',
-                    existing_type=sa.JSON(),
-                    nullable=True,
-                    server_default=None)
+        op.alter_column('users', 'custom_permissions',
+                        existing_type=sa.JSON(),
+                        nullable=True,
+                        server_default=None)

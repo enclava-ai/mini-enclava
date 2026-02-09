@@ -7,7 +7,7 @@ Create Date: 2026-01-22
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
+from app.db.migrations import jsonb_column
 
 
 # revision identifiers, used by Alembic.
@@ -21,7 +21,7 @@ def upgrade():
     # Add context_schema column to extract_templates
     # This allows templates to define custom context variables like company_name, currency, etc.
     op.add_column('extract_templates',
-        sa.Column('context_schema', JSONB, nullable=True)
+        sa.Column('context_schema', jsonb_column(), nullable=True)
     )
 
 

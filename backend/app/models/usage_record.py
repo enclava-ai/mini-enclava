@@ -21,10 +21,10 @@ from sqlalchemy import (
     Index,
     CheckConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, INET
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base, utc_now
+from app.db.types import GUID, INET
 
 
 class UsageRecord(Base):
@@ -50,7 +50,7 @@ class UsageRecord(Base):
 
     # Unique request identifier for tracing across services
     request_id = Column(
-        PGUUID(as_uuid=True),
+        GUID,
         unique=True,
         nullable=False,
         index=True,
@@ -126,14 +126,13 @@ class UsageRecord(Base):
         Index("idx_usage_records_api_key_created", "api_key_id", "created_at"),
         Index("idx_usage_records_user_created", "user_id", "created_at"),
         Index("idx_usage_records_provider_created", "provider_id", "created_at"),
-        # Billing aggregation index
+        # Billing aggregation index (partial index on PostgreSQL, full index on SQLite)
         Index(
             "idx_usage_records_billing",
             "api_key_id",
             "provider_id",
             "normalized_model",
             "created_at",
-            postgresql_where="status = 'success'",
         ),
     )
 

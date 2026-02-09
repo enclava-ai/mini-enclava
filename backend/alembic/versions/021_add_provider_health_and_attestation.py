@@ -10,7 +10,9 @@ Create Date: 2025-01-16
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.db.migrations import (
+    is_postgresql, uuid_column, jsonb_column, timestamp_default
+)
 
 
 # revision identifiers, used by Alembic.
@@ -24,17 +26,18 @@ def upgrade():
     """Add provider health and attestation history tables."""
 
     # Create provider_health table
+    # Note: SQLite doesn't support gen_random_uuid() or onupdate, handle in application layer
     op.create_table(
         'provider_health',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True, server_default=sa.text('gen_random_uuid()')),
+        sa.Column('id', uuid_column(), primary_key=True),
         sa.Column('provider_id', sa.String(length=50), nullable=False, unique=True),
         sa.Column('healthy', sa.Boolean(), nullable=False, server_default='false'),
         sa.Column('last_check_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('last_healthy_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('error', sa.Text(), nullable=True),
-        sa.Column('last_attestation_json', JSONB, nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()')),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), onupdate=sa.text('NOW()')),
+        sa.Column('last_attestation_json', jsonb_column(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=timestamp_default()),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=timestamp_default()),
         sa.PrimaryKeyConstraint('id')
     )
 
@@ -44,7 +47,7 @@ def upgrade():
     # Create attestation_history table
     op.create_table(
         'attestation_history',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True, server_default=sa.text('gen_random_uuid()')),
+        sa.Column('id', uuid_column(), primary_key=True),
         sa.Column('provider_id', sa.String(length=50), nullable=False),
         sa.Column('model', sa.String(length=255), nullable=False),
         sa.Column('verified', sa.Boolean(), nullable=False),
@@ -53,7 +56,7 @@ def upgrade():
         sa.Column('gpu_attestation_verified', sa.Boolean(), nullable=True),
         sa.Column('nonce_binding_verified', sa.Boolean(), nullable=True),
         sa.Column('error', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()')),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=timestamp_default()),
         sa.PrimaryKeyConstraint('id')
     )
 
@@ -61,7 +64,7 @@ def upgrade():
     op.create_index(
         'idx_attestation_history_provider',
         'attestation_history',
-        ['provider_id', sa.text('created_at DESC')]
+        ['provider_id', 'created_at']
     )
 
 
