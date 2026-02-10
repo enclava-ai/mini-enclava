@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     REDPILL_API_KEY: Optional[str] = os.getenv("REDPILL_API_KEY")
     REDPILL_BASE_URL: str = os.getenv("REDPILL_BASE_URL", "https://api.redpill.ai/v1")
     REDPILL_TEST_MODEL: str = os.getenv("REDPILL_TEST_MODEL", "phala/deepseek-v3.2")
+
+    # Skip attestation verification (for development/testing with non-TEE models)
+    SKIP_ATTESTATION_CHECK: bool = os.getenv("SKIP_ATTESTATION_CHECK", "False").lower() == "true"
     # Confidential model prefixes (comma-separated)
     REDPILL_CONFIDENTIAL_MODEL_PREFIXES: str = os.getenv(
         "REDPILL_CONFIDENTIAL_MODEL_PREFIXES", "phala/,tinfoil/,nearai/"

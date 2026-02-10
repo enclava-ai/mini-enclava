@@ -56,6 +56,8 @@ services:
       - REDPILL_API_KEY=${REDPILL_API_KEY:-}
       - REDPILL_BASE_URL=${REDPILL_BASE_URL:-https://api.redpill.ai/v1}
       - REDPILL_TEST_MODEL=${REDPILL_TEST_MODEL:-phala/deepseek-v3.2}
+      # Skip attestation verification (for testing only)
+      - SKIP_ATTESTATION_CHECK=true
       # Extract-only modules
       - EXTRACT_ENABLED=true
       - CHATBOTS_ENABLED=false

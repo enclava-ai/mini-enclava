@@ -88,6 +88,21 @@ def timestamp_default() -> sa.sql.elements.TextClause:
     return sa.text("CURRENT_TIMESTAMP")
 
 
+def autoincrement_int_column() -> sa.types.TypeEngine:
+    """
+    Get appropriate auto-incrementing integer primary key type.
+
+    - PostgreSQL: BigInteger (supports BIGSERIAL)
+    - SQLite: Integer (only INTEGER PRIMARY KEY auto-increments in SQLite)
+
+    Note: SQLite only auto-increments INTEGER PRIMARY KEY columns,
+    not BIGINT. Use this helper for auto-incrementing PKs.
+    """
+    if is_postgresql():
+        return sa.BigInteger()
+    return sa.Integer()
+
+
 # =============================================================================
 # Enum Helpers
 # =============================================================================

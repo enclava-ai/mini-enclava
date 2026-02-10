@@ -12,7 +12,8 @@ Create Date: 2025-01-15
 from alembic import op
 import sqlalchemy as sa
 from app.db.migrations import (
-    is_postgresql, is_sqlite, uuid_column, inet_column, jsonb_column
+    is_postgresql, is_sqlite, uuid_column, inet_column, jsonb_column,
+    autoincrement_int_column
 )
 
 
@@ -29,8 +30,8 @@ def upgrade():
     # Create usage_records table
     op.create_table(
         'usage_records',
-        # Primary key
-        sa.Column('id', sa.BigInteger(), nullable=False, autoincrement=True),
+        # Primary key - use autoincrement_int_column() for SQLite compatibility
+        sa.Column('id', autoincrement_int_column(), nullable=False, autoincrement=True),
 
         # Unique request identifier for tracing
         sa.Column('request_id', uuid_column(), nullable=False),
