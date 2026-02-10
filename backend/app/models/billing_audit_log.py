@@ -22,10 +22,10 @@ from sqlalchemy import (
     Text,
     ForeignKey,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB, INET
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base, utc_now
+from app.db.types import GUID, JSONB, INET
 
 
 class EntityType(str, Enum):
@@ -117,7 +117,7 @@ class BillingAuditLog(Base):
     reason = Column(Text, nullable=True)
     ip_address = Column(INET, nullable=True)
     user_agent = Column(Text, nullable=True)
-    request_id = Column(PGUUID(as_uuid=True), nullable=True)
+    request_id = Column(GUID, nullable=True)
 
     # Related entities for efficient querying
     related_api_key_id = Column(Integer, nullable=True)

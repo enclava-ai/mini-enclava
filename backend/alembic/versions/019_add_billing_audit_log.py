@@ -11,7 +11,9 @@ Create Date: 2025-01-15
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from app.db.migrations import (
+    is_postgresql, uuid_column, inet_column, jsonb_column, create_index
+)
 
 
 # revision identifiers, used by Alembic.
@@ -37,8 +39,8 @@ def upgrade():
         # Action type
         sa.Column('action', sa.String(30), nullable=False),
 
-        # Changes stored as JSONB: {"field": {"old": x, "new": y}, ...}
-        sa.Column('changes', postgresql.JSONB(), nullable=False),
+        # Changes stored as JSON: {"field": {"old": x, "new": y}, ...}
+        sa.Column('changes', jsonb_column(), nullable=False),
 
         # Actor information
         sa.Column('actor_type', sa.String(20), nullable=False),  # 'user', 'system', 'api_sync'
@@ -47,9 +49,9 @@ def upgrade():
 
         # Context
         sa.Column('reason', sa.Text(), nullable=True),
-        sa.Column('ip_address', postgresql.INET(), nullable=True),
+        sa.Column('ip_address', inet_column(), nullable=True),
         sa.Column('user_agent', sa.Text(), nullable=True),
-        sa.Column('request_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('request_id', uuid_column(), nullable=True),
 
         # Related entities for efficient querying
         sa.Column('related_api_key_id', sa.Integer(), nullable=True),
@@ -66,29 +68,40 @@ def upgrade():
     # Create indexes for efficient querying
 
     # Main lookup index: entity type + entity ID + time (DESC)
-    op.create_index(
+    create_index(
         'idx_billing_audit_entity',
         'billing_audit_log',
         ['entity_type', 'entity_id', 'created_at'],
         postgresql_ops={'created_at': 'DESC'},
     )
 
-    # Partial index for API key audit trail queries
-    op.execute("""
-        CREATE INDEX idx_billing_audit_api_key
-        ON billing_audit_log(related_api_key_id, created_at DESC)
-        WHERE related_api_key_id IS NOT NULL
-    """)
-
-    # Partial index for budget audit trail queries
-    op.execute("""
-        CREATE INDEX idx_billing_audit_budget
-        ON billing_audit_log(related_budget_id, created_at DESC)
-        WHERE related_budget_id IS NOT NULL
-    """)
+    # Partial indexes (PostgreSQL only) or regular indexes (SQLite)
+    if is_postgresql():
+        op.execute("""
+            CREATE INDEX idx_billing_audit_api_key
+            ON billing_audit_log(related_api_key_id, created_at DESC)
+            WHERE related_api_key_id IS NOT NULL
+        """)
+        op.execute("""
+            CREATE INDEX idx_billing_audit_budget
+            ON billing_audit_log(related_budget_id, created_at DESC)
+            WHERE related_budget_id IS NOT NULL
+        """)
+        op.execute("""
+            CREATE INDEX idx_billing_audit_actor
+            ON billing_audit_log(actor_user_id, created_at DESC)
+            WHERE actor_user_id IS NOT NULL
+        """)
+    else:
+        op.create_index('idx_billing_audit_api_key', 'billing_audit_log',
+                        ['related_api_key_id', 'created_at'])
+        op.create_index('idx_billing_audit_budget', 'billing_audit_log',
+                        ['related_budget_id', 'created_at'])
+        op.create_index('idx_billing_audit_actor', 'billing_audit_log',
+                        ['actor_user_id', 'created_at'])
 
     # Index for user audit trail queries (all actions by or affecting a user)
-    op.create_index(
+    create_index(
         'idx_billing_audit_user',
         'billing_audit_log',
         ['related_user_id', 'created_at'],
@@ -96,30 +109,32 @@ def upgrade():
     )
 
     # Time-based queries (recent activity)
-    op.create_index(
+    create_index(
         'idx_billing_audit_time',
         'billing_audit_log',
         ['created_at'],
         postgresql_ops={'created_at': 'DESC'},
     )
 
-    # Actor user queries
-    op.execute("""
-        CREATE INDEX idx_billing_audit_actor
-        ON billing_audit_log(actor_user_id, created_at DESC)
-        WHERE actor_user_id IS NOT NULL
-    """)
-
 
 def downgrade():
     """Remove billing_audit_log table."""
 
-    # Drop indexes
-    op.execute("DROP INDEX IF EXISTS idx_billing_audit_actor")
+    # Drop indexes (handle both PostgreSQL and SQLite)
+    try:
+        op.drop_index('idx_billing_audit_actor', table_name='billing_audit_log')
+    except Exception:
+        pass
     op.drop_index('idx_billing_audit_time', table_name='billing_audit_log')
     op.drop_index('idx_billing_audit_user', table_name='billing_audit_log')
-    op.execute("DROP INDEX IF EXISTS idx_billing_audit_budget")
-    op.execute("DROP INDEX IF EXISTS idx_billing_audit_api_key")
+    try:
+        op.drop_index('idx_billing_audit_budget', table_name='billing_audit_log')
+    except Exception:
+        pass
+    try:
+        op.drop_index('idx_billing_audit_api_key', table_name='billing_audit_log')
+    except Exception:
+        pass
     op.drop_index('idx_billing_audit_entity', table_name='billing_audit_log')
 
     # Drop table

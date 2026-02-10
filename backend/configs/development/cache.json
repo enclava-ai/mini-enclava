@@ -1,5 +1,5 @@
 {
-  "redis_url": "redis://enclava-redis:6379",
+  "redis_url": "redis://localhost:6379",
   "timeout": 30,
   "max_connections": 10
 }

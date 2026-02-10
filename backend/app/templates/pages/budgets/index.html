@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "macros/components.html" import button, progress, empty_state %}
+{% from "macros/modals.html" import modal %}
+{% from "macros/forms.html" import input, select, number_input, switch, csrf_input %}
+
+{% block title %}Budgets - Enclava{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-display font-bold">Budgets</h1>
+      <p class="text-muted-foreground mt-1">Set spending limits and track usage</p>
+    </div>
+    {{ button('Create Budget', hx_attrs={'onclick': "openModal('create-budget-modal')"}) }}
+  </div>
+
+  <!-- Budgets List -->
+  <div id="budgets-list">
+    {% include "pages/budgets/_list.html" %}
+  </div>
+</div>
+
+<!-- Create Budget Modal -->
+<dialog id="create-budget-modal" class="rounded-lg border bg-card text-card-foreground shadow-lg p-0 backdrop:bg-black/50 max-w-lg w-full">
+  <form
+    hx-post="/budgets"
+    hx-target="#budgets-list"
+    hx-swap="innerHTML"
+    hx-on::after-request="if(event.detail.successful) closeModal('create-budget-modal')"
+    class="flex flex-col"
+  >
+    {{ csrf_input(csrf_token) }}
+
+    <div class="flex items-center justify-between p-6 border-b">
+      <div>
+        <h2 class="text-lg font-semibold">Create Budget</h2>
+        <p class="text-sm text-muted-foreground">Set a spending limit</p>
+      </div>
+      <button type="button" onclick="closeModal('create-budget-modal')" class="opacity-70 hover:opacity-100">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="p-6 space-y-4">
+      {{ input(name='name', label='Budget Name', placeholder='e.g., Monthly API Budget', required=true) }}
+
+      {{ number_input(name='amount', label='Amount ($)', placeholder='100.00', required=true, min='0', step='0.01') }}
+
+      {% set period_options = [
+        {'value': 'daily', 'label': 'Daily'},
+        {'value': 'weekly', 'label': 'Weekly'},
+        {'value': 'monthly', 'label': 'Monthly'},
+        {'value': 'yearly', 'label': 'Yearly'}
+      ] %}
+      {{ select(name='period', options=period_options, value='monthly', label='Period', required=true) }}
+
+      {{ number_input(name='warning_threshold', label='Warning Threshold (%)', value='80', min='0', max='100') }}
+      <p class="text-sm text-muted-foreground">Get notified when spending reaches this percentage</p>
+
+      {{ switch(name='auto_renew', label='Auto-renew at period end', checked=true) }}
+    </div>
+
+    <div class="flex justify-end gap-3 p-6 pt-0 border-t">
+      <button type="button" onclick="closeModal('create-budget-modal')" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 border border-input bg-background hover:bg-accent">
+        Cancel
+      </button>
+      {{ button('Create Budget', type='submit') }}
+    </div>
+  </form>
+</dialog>
+{% endblock %}

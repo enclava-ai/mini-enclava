@@ -1,0 +1,105 @@
+{% from "macros/components.html" import button, card, empty_state, badge %}
+{% from "macros/modals.html" import modal, modal_footer %}
+{% from "macros/forms.html" import input, textarea, csrf_input %}
+
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-lg font-semibold">Extraction Templates</h2>
+      <p class="text-sm text-muted-foreground">Define schemas for structured data extraction</p>
+    </div>
+    {{ button('Create Template', variant='default', hx_attrs={'onclick': "openModal('create-template-modal')"}) }}
+  </div>
+
+  <!-- Templates List -->
+  <div id="templates-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for template in templates %}
+    <div class="rounded-lg border bg-card p-4">
+      <div class="flex items-start justify-between">
+        <div>
+          <h3 class="font-medium">{{ template.name }}</h3>
+          {% if template.description %}
+          <p class="text-sm text-muted-foreground mt-1">{{ template.description | truncate(50) }}</p>
+          {% endif %}
+        </div>
+        {% if template.is_default %}
+        {{ badge('Default', variant='secondary') }}
+        {% endif %}
+      </div>
+
+      <div class="flex items-center gap-2 mt-4">
+        {% if not template.is_default %}
+        <button
+          type="button"
+          onclick="editTemplate('{{ template.id }}')"
+          class="text-sm text-muted-foreground hover:text-foreground"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          hx-delete="/extract/templates/{{ template.id }}"
+          hx-target="#templates-list"
+          hx-swap="outerHTML"
+          hx-confirm="Are you sure you want to delete this template?"
+          class="text-sm text-destructive hover:text-destructive/80"
+        >
+          Delete
+        </button>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    {{ empty_state(
+      title='No templates',
+      description='Create an extraction template to get started',
+      icon='<svg class="h-12 w-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>'
+    ) }}
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Create Template Modal -->
+<dialog id="create-template-modal" class="rounded-lg border bg-card text-card-foreground shadow-lg p-0 backdrop:bg-black/50 max-w-lg w-full">
+  <form
+    hx-post="/extract/templates"
+    hx-target="#templates-list"
+    hx-swap="outerHTML"
+    hx-on::after-request="if(event.detail.successful) closeModal('create-template-modal')"
+    class="flex flex-col"
+  >
+    {{ csrf_input(csrf_token) }}
+
+    <div class="flex items-center justify-between p-6 border-b">
+      <div>
+        <h2 class="text-lg font-semibold">Create Template</h2>
+        <p class="text-sm text-muted-foreground">Define a new extraction schema</p>
+      </div>
+      <button type="button" onclick="closeModal('create-template-modal')" class="opacity-70 hover:opacity-100">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="p-6 space-y-4">
+      {{ input(name='name', label='Template Name', placeholder='e.g., Invoice Extraction', required=true) }}
+      {{ textarea(name='description', label='Description', placeholder='What does this template extract?', rows=2) }}
+      {{ textarea(
+        name='schema_json',
+        label='Schema (JSON)',
+        placeholder='{"invoice_number": "string", "total_amount": "number", ...}',
+        rows=6,
+        required=true
+      ) }}
+    </div>
+
+    <div class="flex justify-end gap-3 p-6 pt-0 border-t">
+      <button type="button" onclick="closeModal('create-template-modal')" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 border border-input bg-background hover:bg-accent">
+        Cancel
+      </button>
+      {{ button('Create Template', type='submit') }}
+    </div>
+  </form>
+</dialog>

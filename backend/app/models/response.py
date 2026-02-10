@@ -79,19 +79,21 @@ class Response(Base):
     api_key = relationship("APIKey", foreign_keys=[api_key_id])
 
     # Indexes are defined in table args
+    # Note: postgresql_where partial indexes removed for SQLite compatibility
+    # Full indexes used instead (slight storage overhead but works cross-database)
     __table_args__ = (
         # Primary lookups
         Index("idx_responses_id", "id"),
-        Index("idx_responses_conversation_id", "conversation_id", postgresql_where=(conversation_id.isnot(None))),
-        Index("idx_responses_previous_response_id", "previous_response_id", postgresql_where=(previous_response_id.isnot(None))),
+        Index("idx_responses_conversation_id", "conversation_id"),
+        Index("idx_responses_previous_response_id", "previous_response_id"),
 
         # Ownership lookups
-        Index("idx_responses_api_key_id", "api_key_id", postgresql_where=(api_key_id.isnot(None))),
-        Index("idx_responses_user_id", "user_id", postgresql_where=(user_id.isnot(None))),
+        Index("idx_responses_api_key_id", "api_key_id"),
+        Index("idx_responses_user_id", "user_id"),
 
         # Archival/cleanup queries
-        Index("idx_responses_expires_at", "expires_at", postgresql_where=((expires_at.isnot(None)) & (archived_at.is_(None)))),
-        Index("idx_responses_archived_at", "archived_at", postgresql_where=(archived_at.isnot(None))),
+        Index("idx_responses_expires_at", "expires_at"),
+        Index("idx_responses_archived_at", "archived_at"),
         Index("idx_responses_created_at", "created_at"),
         Index("idx_responses_status", "status"),
     )

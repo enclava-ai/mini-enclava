@@ -1,0 +1,23 @@
+"""Web Routes for HTMX/Jinja2 Frontend"""
+
+from fastapi import APIRouter
+
+from app.api.web.auth import router as auth_router
+from app.api.web.dashboard import router as dashboard_router
+from app.api.web.extract import router as extract_router
+from app.api.web.api_keys import router as api_keys_router
+from app.api.web.budgets import router as budgets_router
+from app.api.web.analytics import router as analytics_router
+from app.api.web.settings import router as settings_router
+
+# Main web router
+web_router = APIRouter(tags=["web"])
+
+# Include all sub-routers
+web_router.include_router(auth_router)
+web_router.include_router(dashboard_router)
+web_router.include_router(extract_router)
+web_router.include_router(api_keys_router)
+web_router.include_router(budgets_router)
+web_router.include_router(analytics_router)
+web_router.include_router(settings_router)

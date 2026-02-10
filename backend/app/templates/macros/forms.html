@@ -1,0 +1,270 @@
+{# Form Macros for Enclava #}
+
+{# Input Component #}
+{% macro input(name, type='text', value='', label='', placeholder='', required=false, error='', disabled=false, class='', autocomplete='', hx_attrs={}) %}
+<div class="space-y-2">
+  {% if label %}
+  <label for="{{ name }}" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+    {{ label }}{% if required %}<span class="text-destructive ml-1">*</span>{% endif %}
+  </label>
+  {% endif %}
+  <input
+    type="{{ type }}"
+    id="{{ name }}"
+    name="{{ name }}"
+    value="{{ value }}"
+    placeholder="{{ placeholder }}"
+    {% if required %}required{% endif %}
+    {% if disabled %}disabled{% endif %}
+    {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
+    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 {% if error %}border-destructive{% endif %} {{ class }}"
+    {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+  >
+  {% if error %}
+  <p class="text-sm text-destructive">{{ error }}</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Textarea Component #}
+{% macro textarea(name, value='', label='', rows=3, placeholder='', required=false, error='', disabled=false, class='', hx_attrs={}) %}
+<div class="space-y-2">
+  {% if label %}
+  <label for="{{ name }}" class="text-sm font-medium leading-none">
+    {{ label }}{% if required %}<span class="text-destructive ml-1">*</span>{% endif %}
+  </label>
+  {% endif %}
+  <textarea
+    id="{{ name }}"
+    name="{{ name }}"
+    rows="{{ rows }}"
+    placeholder="{{ placeholder }}"
+    {% if required %}required{% endif %}
+    {% if disabled %}disabled{% endif %}
+    class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 {% if error %}border-destructive{% endif %} {{ class }}"
+    {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+  >{{ value }}</textarea>
+  {% if error %}
+  <p class="text-sm text-destructive">{{ error }}</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Select Component
+   options should be a list of dicts with 'value' and 'label' keys
+#}
+{% macro select(name, options, value='', label='', placeholder='', required=false, error='', disabled=false, class='', hx_attrs={}) %}
+<div class="space-y-2">
+  {% if label %}
+  <label for="{{ name }}" class="text-sm font-medium leading-none">
+    {{ label }}{% if required %}<span class="text-destructive ml-1">*</span>{% endif %}
+  </label>
+  {% endif %}
+  <select
+    id="{{ name }}"
+    name="{{ name }}"
+    {% if required %}required{% endif %}
+    {% if disabled %}disabled{% endif %}
+    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 {% if error %}border-destructive{% endif %} {{ class }}"
+    {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+  >
+    {% if placeholder %}
+    <option value="" {% if not value %}selected{% endif %} disabled>{{ placeholder }}</option>
+    {% endif %}
+    {% for option in options %}
+    <option value="{{ option.value }}" {% if option.value == value %}selected{% endif %}>
+      {{ option.label }}
+    </option>
+    {% endfor %}
+  </select>
+  {% if error %}
+  <p class="text-sm text-destructive">{{ error }}</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Checkbox Component #}
+{% macro checkbox(name, checked=false, label='', disabled=false, class='', hx_attrs={}) %}
+<div class="flex items-center space-x-2 {{ class }}">
+  <input
+    type="checkbox"
+    id="{{ name }}"
+    name="{{ name }}"
+    {% if checked %}checked{% endif %}
+    {% if disabled %}disabled{% endif %}
+    class="h-4 w-4 rounded border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+  >
+  {% if label %}
+  <label for="{{ name }}" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+    {{ label }}
+  </label>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Switch/Toggle Component #}
+{% macro switch(name, checked=false, label='', disabled=false, class='', hx_attrs={}) %}
+<label class="flex items-center cursor-pointer {{ class }}">
+  <div class="relative">
+    <input
+      type="checkbox"
+      id="{{ name }}"
+      name="{{ name }}"
+      {% if checked %}checked{% endif %}
+      {% if disabled %}disabled{% endif %}
+      class="sr-only peer"
+      {% for attr, val in hx_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}
+    >
+    <div class="w-11 h-6 bg-muted rounded-full peer peer-checked:bg-primary peer-focus:ring-2 peer-focus:ring-ring peer-disabled:opacity-50 peer-disabled:cursor-not-allowed transition-colors"></div>
+    <div class="absolute left-0.5 top-0.5 bg-background w-5 h-5 rounded-full transition-transform peer-checked:translate-x-5 shadow-sm"></div>
+  </div>
+  {% if label %}
+  <span class="ml-3 text-sm font-medium">{{ label }}</span>
+  {% endif %}
+</label>
+{% endmacro %}
+
+{# File Upload Component with drag-drop #}
+{% macro file_upload(name, accept='', max_size_mb=10, label='', required=false, error='', class='') %}
+<div class="space-y-2 {{ class }}">
+  {% if label %}
+  <label for="{{ name }}" class="text-sm font-medium leading-none">
+    {{ label }}{% if required %}<span class="text-destructive ml-1">*</span>{% endif %}
+  </label>
+  {% endif %}
+  <div
+    id="{{ name }}-dropzone"
+    class="border-2 border-dashed border-input rounded-lg p-8 text-center cursor-pointer transition-colors hover:border-primary hover:bg-primary/5"
+  >
+    <input
+      type="file"
+      id="{{ name }}"
+      name="{{ name }}"
+      {% if accept %}accept="{{ accept }}"{% endif %}
+      {% if required %}required{% endif %}
+      class="hidden"
+    >
+    <svg class="mx-auto h-12 w-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+    </svg>
+    <p class="mt-2 text-sm text-muted-foreground">
+      <span class="font-semibold text-primary">Click to upload</span> or drag and drop
+    </p>
+    {% if accept %}
+    <p class="mt-1 text-xs text-muted-foreground">{{ accept }} (max {{ max_size_mb }}MB)</p>
+    {% endif %}
+    <div id="{{ name }}-preview" class="mt-4"></div>
+  </div>
+  {% if error %}
+  <p class="text-sm text-destructive">{{ error }}</p>
+  {% endif %}
+</div>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    initFileUpload('{{ name }}-dropzone', '{{ name }}', '{{ name }}-preview');
+  });
+</script>
+{% endmacro %}
+
+{# Form Group - wrapper with spacing #}
+{% macro form_group(label='', help_text='', class='') %}
+<div class="space-y-2 {{ class }}">
+  {% if label %}
+  <label class="text-sm font-medium leading-none">{{ label }}</label>
+  {% endif %}
+  {% if caller is defined %}{{ caller() }}{% endif %}
+  {% if help_text %}
+  <p class="text-sm text-muted-foreground">{{ help_text }}</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Hidden CSRF Input #}
+{% macro csrf_input(token) %}
+<input type="hidden" name="csrf_token" value="{{ token }}">
+{% endmacro %}
+
+{# Radio Group #}
+{% macro radio_group(name, options, value='', label='', required=false, class='') %}
+<div class="space-y-3 {{ class }}">
+  {% if label %}
+  <label class="text-sm font-medium leading-none">
+    {{ label }}{% if required %}<span class="text-destructive ml-1">*</span>{% endif %}
+  </label>
+  {% endif %}
+  <div class="space-y-2">
+    {% for option in options %}
+    <div class="flex items-center space-x-2">
+      <input
+        type="radio"
+        id="{{ name }}-{{ option.value }}"
+        name="{{ name }}"
+        value="{{ option.value }}"
+        {% if option.value == value %}checked{% endif %}
+        {% if required %}required{% endif %}
+        class="h-4 w-4 border-input text-primary focus:ring-2 focus:ring-ring"
+      >
+      <label for="{{ name }}-{{ option.value }}" class="text-sm">
+        {{ option.label }}
+        {% if option.description %}
+        <span class="block text-xs text-muted-foreground">{{ option.description }}</span>
+        {% endif %}
+      </label>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+{# Date Input #}
+{% macro date_input(name, value='', label='', required=false, error='', disabled=false, min='', max='', class='') %}
+<div class="space-y-2">
+  {% if label %}
+  <label for="{{ name }}" class="text-sm font-medium leading-none">
+    {{ label }}{% if required %}<span class="text-destructive ml-1">*</span>{% endif %}
+  </label>
+  {% endif %}
+  <input
+    type="date"
+    id="{{ name }}"
+    name="{{ name }}"
+    value="{{ value }}"
+    {% if required %}required{% endif %}
+    {% if disabled %}disabled{% endif %}
+    {% if min %}min="{{ min }}"{% endif %}
+    {% if max %}max="{{ max }}"{% endif %}
+    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 {% if error %}border-destructive{% endif %} {{ class }}"
+  >
+  {% if error %}
+  <p class="text-sm text-destructive">{{ error }}</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Number Input #}
+{% macro number_input(name, value='', label='', placeholder='', required=false, error='', disabled=false, min='', max='', step='', class='') %}
+<div class="space-y-2">
+  {% if label %}
+  <label for="{{ name }}" class="text-sm font-medium leading-none">
+    {{ label }}{% if required %}<span class="text-destructive ml-1">*</span>{% endif %}
+  </label>
+  {% endif %}
+  <input
+    type="number"
+    id="{{ name }}"
+    name="{{ name }}"
+    value="{{ value }}"
+    placeholder="{{ placeholder }}"
+    {% if required %}required{% endif %}
+    {% if disabled %}disabled{% endif %}
+    {% if min %}min="{{ min }}"{% endif %}
+    {% if max %}max="{{ max }}"{% endif %}
+    {% if step %}step="{{ step }}"{% endif %}
+    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 {% if error %}border-destructive{% endif %} {{ class }}"
+  >
+  {% if error %}
+  <p class="text-sm text-destructive">{{ error }}</p>
+  {% endif %}
+</div>
+{% endmacro %}

@@ -1,0 +1,130 @@
+# Mini-Enclava: Simplified Docker Compose
+# Single application container with PostgreSQL and Redis
+#
+# Usage:
+#   podman compose -f docker-compose.mini.yml up --build
+#
+# This removes:
+#   - nginx (FastAPI serves directly)
+#   - frontend container (templates in backend)
+#   - qdrant (no RAG needed for Extract module)
+
+services:
+  # Database migration service - runs once to apply migrations
+  enclava-migrate:
+    container_name: mini-enclava-migrate
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://enclava_user:enclava_pass@mini-enclava-postgres:5432/enclava_db
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - BASE_URL=${BASE_URL:-http://localhost:8000}
+    depends_on:
+      mini-enclava-postgres:
+        condition: service_healthy
+    command: ["/usr/local/bin/migrate.sh"]
+    networks:
+      - mini-enclava-net
+    restart: "no"
+    security_opt:
+      - label=disable
+
+  # Main application (FastAPI with HTMX/Jinja2 frontend)
+  enclava:
+    container_name: mini-enclava
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://enclava_user:enclava_pass@mini-enclava-postgres:5432/enclava_db
+      - REDIS_URL=redis://mini-enclava-redis:6379
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - BASE_URL=${BASE_URL:-http://localhost:8000}
+      # LLM Provider - choose one:
+      # Option 1: RedPill AI (recommended for Extract)
+      - REDPILL_API_KEY=${REDPILL_API_KEY:-}
+      - REDPILL_BASE_URL=${REDPILL_BASE_URL:-https://api.redpill.ai/v1}
+      # Option 2: Privatemode.ai (for confidential processing)
+      - PRIVATEMODE_API_KEY=${PRIVATEMODE_API_KEY:-}
+      # Skip attestation verification (for development - enables models without TEE checks)
+      - SKIP_ATTESTATION_CHECK=${SKIP_ATTESTATION_CHECK:-true}
+    depends_on:
+      enclava-migrate:
+        condition: service_completed_successfully
+      mini-enclava-postgres:
+        condition: service_healthy
+      mini-enclava-redis:
+        condition: service_started
+    volumes:
+      # For development: mount source for hot reload
+      # Comment out for production
+      - ./backend/app:/app/app:z
+      - ./logs:/app/logs:z
+    networks:
+      - mini-enclava-net
+    restart: unless-stopped
+    security_opt:
+      - label=disable
+
+  # PostgreSQL database
+  mini-enclava-postgres:
+    container_name: mini-enclava-postgres
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=enclava_db
+      - POSTGRES_USER=enclava_user
+      - POSTGRES_PASSWORD=enclava_pass
+    volumes:
+      - mini-enclava-postgres-data:/var/lib/postgresql/data
+    networks:
+      - mini-enclava-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enclava_user -d enclava_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - label=disable
+
+  # Redis for caching and sessions
+  mini-enclava-redis:
+    container_name: mini-enclava-redis
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - mini-enclava-redis-data:/data
+    networks:
+      - mini-enclava-net
+    restart: unless-stopped
+    security_opt:
+      - label=disable
+
+  # Optional: Privatemode proxy (uncomment if using privatemode.ai)
+  # privatemode-proxy:
+  #   container_name: mini-enclava-privatemode
+  #   image: ghcr.io/edgelesssys/privatemode/privatemode-proxy:latest
+  #   environment:
+  #     - PRIVATEMODE_API_KEY=${PRIVATEMODE_API_KEY:-}
+  #   entrypoint: ["/bin/privatemode-proxy"]
+  #   command: ["--apiKey=${PRIVATEMODE_API_KEY}", "--port=8080"]
+  #   ports:
+  #     - "58080:8080"
+  #   networks:
+  #     - mini-enclava-net
+  #   restart: unless-stopped
+
+volumes:
+  mini-enclava-postgres-data:
+  mini-enclava-redis-data:
+
+networks:
+  mini-enclava-net:
+    driver: bridge

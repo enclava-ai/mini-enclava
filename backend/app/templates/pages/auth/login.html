@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "macros/forms.html" import input, csrf_input %}
+{% from "macros/components.html" import button, alert %}
+
+{% block title %}Login - Enclava{% endblock %}
+
+{% block auth_content %}
+<div class="w-full max-w-md mx-auto">
+  <div class="text-center mb-8">
+    <h1 class="text-3xl font-display font-bold gradient-text">Enclava</h1>
+    <p class="text-muted-foreground mt-2">Sign in to your account</p>
+  </div>
+
+  <div class="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+    {% if error %}
+    {{ alert('error', message=error, class='mb-4') }}
+    {% endif %}
+
+    {% if message %}
+    {{ alert('info', message=message, class='mb-4') }}
+    {% endif %}
+
+    <form method="POST" action="/login" class="space-y-4">
+      {{ csrf_input(csrf_token) }}
+
+      {{ input(
+        name='email',
+        type='email',
+        label='Email',
+        placeholder='you@example.com',
+        required=true,
+        value=email if email else '',
+        autocomplete='email'
+      ) }}
+
+      {{ input(
+        name='password',
+        type='password',
+        label='Password',
+        placeholder='Enter your password',
+        required=true,
+        autocomplete='current-password'
+      ) }}
+
+      <div class="pt-2">
+        {{ button('Sign In', type='submit', class='w-full') }}
+      </div>
+    </form>
+  </div>
+
+  <p class="text-center text-sm text-muted-foreground mt-6">
+    Secure, confidential AI processing powered by
+    <a href="https://privatemode.ai" target="_blank" rel="noopener" class="text-primary hover:underline">
+      privatemode.ai
+    </a>
+  </p>
+</div>
+{% endblock %}

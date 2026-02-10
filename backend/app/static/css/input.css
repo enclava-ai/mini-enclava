@@ -1,0 +1,272 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Light Theme - Clean, professional with cyan/teal accents */
+  :root {
+    /* Background: Clean off-white */
+    --background: 210 20% 98%;
+    /* Foreground: Dark navy for readability */
+    --foreground: 222 30% 12%;
+
+    /* Cards: Pure white for depth against off-white background */
+    --card: 0 0% 100%;
+    --card-foreground: 222 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 30% 12%;
+
+    /* Primary: Electric cyan - slightly darker for light mode contrast */
+    --primary: 190 90% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Teal/Green - slightly darker for light mode */
+    --secondary: 160 84% 32%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted: Light grays */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 96%;
+    --accent-foreground: 222 30% 12%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 190 90% 38%;
+
+    /* Slightly squarer for enterprise feel */
+    --radius: 0.3rem;
+
+    /* Chart colors */
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    /* Font families */
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  /* Dark Theme - Rich navy with cyan/teal accents (matching website) */
+  .dark {
+    /* Background: Rich, professional dark navy */
+    --background: 222 30% 12%;
+    /* Foreground: High contrast off-white */
+    --foreground: 210 20% 98%;
+
+    /* Cards: Slightly lighter than background for depth */
+    --card: 222 30% 15%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 222 30% 15%;
+    --popover-foreground: 210 20% 98%;
+
+    /* Primary: Electric cyan - cypherpunk accent */
+    --primary: 190 90% 45%;
+    --primary-foreground: 222 47% 10%;
+
+    /* Secondary: Teal/Green */
+    --secondary: 160 84% 39%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted: Darker grays for dark mode */
+    --muted: 217 20% 20%;
+    --muted-foreground: 215 15% 75%;
+
+    --accent: 217 20% 20%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 217 20% 20%;
+    --input: 217 20% 20%;
+    --ring: 190 90% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply tracking-tight;
+  }
+  code, pre {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-glow {
+    text-shadow: 0 0 20px hsla(var(--primary), 0.5);
+  }
+  .border-glow {
+    box-shadow: 0 0 10px hsla(var(--primary), 0.3);
+  }
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  .dark .glass-panel {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground;
+}
+
+/* Focus styles */
+.focus-visible:focus {
+  @apply outline-none ring-2 ring-ring ring-offset-2;
+}
+
+/* Custom enclava branding styles - matching website theme */
+.enclava-gradient {
+  background: linear-gradient(135deg, hsl(190 90% 45%) 0%, hsl(160 84% 39%) 100%);
+}
+
+.enclava-glow {
+  box-shadow: 0 0 20px hsla(190, 90%, 45%, 0.3);
+}
+
+.enclava-border {
+  border: 1px solid hsla(190, 90%, 45%, 0.3);
+}
+
+/* HTMX indicator */
+.htmx-indicator {
+  display: none;
+}
+.htmx-request .htmx-indicator {
+  display: inline-block;
+}
+.htmx-request.htmx-indicator {
+  display: inline-block;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full;
+}
+
+/* Button loading state */
+button.htmx-request {
+  @apply opacity-70 pointer-events-none;
+}
+
+/* Toast animations */
+@keyframes toast-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.toast-enter {
+  animation: toast-in 0.3s ease-out forwards;
+}
+
+.toast-exit {
+  animation: toast-out 0.3s ease-in forwards;
+}
+
+/* Tab styling */
+.tab-button {
+  @apply px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground border-b-2 border-transparent transition-colors;
+}
+
+.tab-button.active {
+  @apply text-foreground border-primary;
+}
+
+/* Card hover effect */
+.card-hover {
+  @apply transition-shadow hover:shadow-lg;
+}
+
+/* Badge base */
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors;
+}
+
+/* Dialog backdrop */
+dialog::backdrop {
+  @apply bg-black/50;
+}
+
+dialog[open] {
+  @apply animate-in fade-in-0 zoom-in-95;
+}
+
+/* Table styling */
+.table-row-hover:hover {
+  @apply bg-muted/50;
+}
+
+/* Code blocks */
+pre code {
+  @apply block p-4 overflow-x-auto text-sm;
+}
+
+/* Form validation */
+input:invalid:not(:placeholder-shown),
+textarea:invalid:not(:placeholder-shown) {
+  @apply border-destructive;
+}
+
+/* Progress bar animation */
+.progress-bar {
+  @apply transition-all duration-500 ease-out;
+}

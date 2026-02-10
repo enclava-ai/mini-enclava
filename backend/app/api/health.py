@@ -23,6 +23,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.database import async_session_factory, get_pool_status
+from app.db.dialect import sql_table_count
 from app.services.embedding_service import embedding_service
 from app.core.config import settings
 from app.core.security import get_current_user
@@ -72,10 +73,8 @@ class HealthChecker:
                 # Simple query to check connectivity
                 await session.execute(select(1))
 
-                # Check table availability
-                await session.execute(
-                    text("SELECT COUNT(*) FROM information_schema.tables")
-                )
+                # Check table availability (cross-database compatible)
+                await session.execute(text(sql_table_count()))
 
                 duration = time.time() - start_time
 
@@ -102,27 +101,43 @@ class HealthChecker:
         """Check database connection pool health"""
         try:
             pool_status = get_pool_status()
+            backend = pool_status.get("backend")
+
+            # SQLite uses StaticPool; pool metrics/config aren't available
+            if backend == "sqlite":
+                return {
+                    "status": "healthy",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "pool_status": pool_status,
+                    "issues": [],
+                    "message": pool_status.get(
+                        "message",
+                        "Pool monitoring not applicable for SQLite (uses StaticPool)",
+                    ),
+                }
 
             # Analyze pool status for potential issues
             issues = []
             pool_health = "healthy"
+            config = pool_status.get("config", {})
 
             # Check async pool
             async_pool = pool_status.get("async_pool", {})
             if "error" not in async_pool:
                 async_checked_out = async_pool.get("checked_out", 0)
                 async_overflow = async_pool.get("overflow", 0)
-                async_max = pool_status["config"]["async_max_connections"]
+                async_max = config.get("async_max_connections")
 
                 # Warning if using more than 70% of max connections
-                if async_checked_out > async_max * 0.7:
-                    pool_health = "warning"
-                    issues.append(f"Async pool high utilization: {async_checked_out}/{async_max}")
+                if async_max is not None:
+                    if async_checked_out > async_max * 0.7:
+                        pool_health = "warning"
+                        issues.append(f"Async pool high utilization: {async_checked_out}/{async_max}")
 
-                # Critical if using more than 90%
-                if async_checked_out > async_max * 0.9:
-                    pool_health = "critical"
-                    issues.append(f"Async pool near exhaustion: {async_checked_out}/{async_max}")
+                    # Critical if using more than 90%
+                    if async_checked_out > async_max * 0.9:
+                        pool_health = "critical"
+                        issues.append(f"Async pool near exhaustion: {async_checked_out}/{async_max}")
 
                 # Warning if overflow is being used
                 if async_overflow > 0:
@@ -135,18 +150,19 @@ class HealthChecker:
             if "error" not in sync_pool:
                 sync_checked_out = sync_pool.get("checked_out", 0)
                 sync_overflow = sync_pool.get("overflow", 0)
-                sync_max = pool_status["config"]["sync_max_connections"]
+                sync_max = config.get("sync_max_connections")
 
                 # Warning if using more than 70% of max connections
-                if sync_checked_out > sync_max * 0.7:
-                    if pool_health == "healthy":
-                        pool_health = "warning"
-                    issues.append(f"Sync pool high utilization: {sync_checked_out}/{sync_max}")
+                if sync_max is not None:
+                    if sync_checked_out > sync_max * 0.7:
+                        if pool_health == "healthy":
+                            pool_health = "warning"
+                        issues.append(f"Sync pool high utilization: {sync_checked_out}/{sync_max}")
 
-                # Critical if using more than 90%
-                if sync_checked_out > sync_max * 0.9:
-                    pool_health = "critical"
-                    issues.append(f"Sync pool near exhaustion: {sync_checked_out}/{sync_max}")
+                    # Critical if using more than 90%
+                    if sync_checked_out > sync_max * 0.9:
+                        pool_health = "critical"
+                        issues.append(f"Sync pool near exhaustion: {sync_checked_out}/{sync_max}")
 
                 # Warning if overflow is being used
                 if sync_overflow > 0:

@@ -59,13 +59,19 @@ class RedPillProvider(BaseLLMProvider):
         return "RedPill.ai (Confidential)"
 
     def is_available(self) -> bool:
-        """Provider is available only if attestation is healthy."""
+        """Provider is available only if attestation is healthy (or skipped)."""
+        from app.core.config import settings
+
+        # Skip attestation check if configured (for development/mini-enclava)
+        if settings.SKIP_ATTESTATION_CHECK:
+            return True
+
         # Import here to avoid circular dependency
         from ..attestation.scheduler import attestation_scheduler
         return attestation_scheduler.is_healthy(self.provider_name)
 
     def supports_model(self, model: str) -> bool:
-        """Only support confidential models when healthy."""
+        """Only support confidential models when healthy (or attestation skipped)."""
         if not model.lower().startswith(CONFIDENTIAL_MODEL_PREFIXES):
             return False
         return self.is_available()

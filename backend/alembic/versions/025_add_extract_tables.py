@@ -9,7 +9,7 @@ This migration merges two branches and adds Extract tables.
 """
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
+from app.db.migrations import uuid_column, jsonb_column
 
 # revision identifiers, used by Alembic.
 revision = "025_add_extract_tables"
@@ -27,7 +27,7 @@ def upgrade():
         sa.Column("description", sa.Text, nullable=True),
         sa.Column("system_prompt", sa.Text, nullable=False),
         sa.Column("user_prompt", sa.Text, nullable=False),
-        sa.Column("output_schema", postgresql.JSONB, nullable=True),
+        sa.Column("output_schema", jsonb_column(), nullable=True),
         sa.Column("is_default", sa.Boolean, default=False, nullable=False),
         sa.Column("is_active", sa.Boolean, default=True, nullable=False),
         sa.Column(
@@ -42,7 +42,7 @@ def upgrade():
     # Extract Jobs
     op.create_table(
         "extract_jobs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", uuid_column(), primary_key=True),
         sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id"), nullable=False),
         sa.Column(
             "api_key_id", sa.Integer, sa.ForeignKey("api_keys.id"), nullable=True
@@ -77,18 +77,18 @@ def upgrade():
     # Extract Results
     op.create_table(
         "extract_results",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", uuid_column(), primary_key=True),
         sa.Column(
             "job_id",
-            postgresql.UUID(as_uuid=True),
+            uuid_column(),
             sa.ForeignKey("extract_jobs.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("attempt_number", sa.Integer, default=1, nullable=False),
         sa.Column("raw_response", sa.Text, nullable=True),
-        sa.Column("parsed_data", postgresql.JSONB, nullable=True),
-        sa.Column("validation_errors", postgresql.JSONB, default=[], nullable=False),
-        sa.Column("validation_warnings", postgresql.JSONB, default=[], nullable=False),
+        sa.Column("parsed_data", jsonb_column(), nullable=True),
+        sa.Column("validation_errors", sa.JSON, nullable=False, server_default='[]'),
+        sa.Column("validation_warnings", sa.JSON, nullable=False, server_default='[]'),
         sa.Column("is_final", sa.Boolean, default=False, nullable=False),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()

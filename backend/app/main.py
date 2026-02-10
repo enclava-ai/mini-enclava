@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -23,6 +24,7 @@ from app.core.security import get_current_user
 from app.db.database import init_db, async_session_factory
 from app.api.internal_v1 import internal_api_router
 from app.api.public_v1 import public_api_router
+from app.api.web import web_router
 from app.utils.exceptions import CustomHTTPException
 from app.services.module_manager import module_manager
 from app.services.metrics import setup_metrics
@@ -375,6 +377,12 @@ app.include_router(public_api_router, prefix="/api/v1")
 
 # OpenAI-compatible routes are now included in public API router at /api/v1/
 
+# Mount static files for web frontend
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# Include web routes (HTMX/Jinja2 frontend)
+app.include_router(web_router)
+
 
 # Health check endpoint
 @app.get("/health")
@@ -387,16 +395,7 @@ async def health_check():
     }
 
 
-# Root endpoint
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Enclava - Modular AI Platform",
-        "version": "1.0.0",
-        "docs": "/api/v1/docs",
-        "internal_docs": "/api-internal/v1/docs",
-    }
+# Root endpoint is now handled by web_router (redirects to dashboard or login)
 
 
 if __name__ == "__main__":

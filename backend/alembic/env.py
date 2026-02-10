@@ -50,24 +50,18 @@ if not database_url:
         "Example: DATABASE_URL=postgresql://user:password@host:5432/dbname"
     )
 
+# Detect SQLite
+IS_SQLITE = database_url.startswith("sqlite")
+
+
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
-    url = database_url
+    """Run migrations in 'offline' mode."""
     context.configure(
-        url=url,
+        url=database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=IS_SQLITE,
     )
 
     with context.begin_transaction():
@@ -75,22 +69,36 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    """Run migrations with dialect-appropriate settings."""
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        # CRITICAL: render_as_batch=True required for SQLite ALTER TABLE
+        # Without this, migrations that modify columns will fail on SQLite
+        render_as_batch=IS_SQLITE,
+        # Compare types to catch type changes
+        compare_type=True,
+    )
 
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
+    """Run migrations in 'online' mode."""
     configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = database_url.replace("postgresql://", "postgresql+asyncpg://")
-    
+
+    # Transform URL for async driver
+    if IS_SQLITE:
+        async_url = database_url
+        if "+aiosqlite" not in async_url:
+            async_url = database_url.replace("sqlite://", "sqlite+aiosqlite://")
+        configuration["sqlalchemy.url"] = async_url
+    else:
+        configuration["sqlalchemy.url"] = database_url.replace(
+            "postgresql://", "postgresql+asyncpg://"
+        )
+
     connectable = AsyncEngine(
         engine_from_config(
             configuration,

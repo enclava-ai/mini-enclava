@@ -1,0 +1,39 @@
+{% from "macros/forms.html" import select, csrf_input %}
+{% from "macros/components.html" import button, alert %}
+
+<div class="max-w-2xl">
+  <div class="rounded-lg border bg-card p-6">
+    <h2 class="text-lg font-semibold mb-4">Extract Settings</h2>
+
+    {% if vision_models %}
+    <form
+      hx-put="/extract/settings"
+      hx-target="#settings-result"
+      hx-swap="innerHTML"
+      class="space-y-4"
+    >
+      {{ csrf_input(csrf_token) }}
+
+      {{ select(
+        name='default_model',
+        options=vision_models,
+        value=vision_models[0].value if vision_models else '',
+        label='Default Vision Model',
+        hx_attrs={}
+      ) }}
+
+      <p class="text-sm text-muted-foreground">
+        The default model used for document extraction. Can be overridden per request.
+      </p>
+
+      <div class="flex items-center gap-3 pt-2">
+        {{ button('Save Settings', type='submit') }}
+      </div>
+    </form>
+    {% else %}
+    {{ alert('warning', message='No vision-capable models available. Please configure an LLM provider with vision models.') }}
+    {% endif %}
+
+    <div id="settings-result" class="mt-4"></div>
+  </div>
+</div>

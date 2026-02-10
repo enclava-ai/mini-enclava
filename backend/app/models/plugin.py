@@ -13,12 +13,12 @@ from sqlalchemy import (
     ForeignKey,
     Index,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 
 from app.db.database import Base
+from app.db.types import GUID
 
 
 class Plugin(Base):
@@ -27,7 +27,7 @@ class Plugin(Base):
     __tablename__ = "plugins"
 
     # Primary identification
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
     name = Column(String(100), unique=True, nullable=False, index=True)
     slug = Column(
         String(100), unique=True, nullable=False, index=True
@@ -104,8 +104,8 @@ class PluginConfiguration(Base):
 
     __tablename__ = "plugin_configurations"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    plugin_id = Column(UUID(as_uuid=True), ForeignKey("plugins.id"), nullable=False)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    plugin_id = Column(GUID, ForeignKey("plugins.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Configuration data
@@ -138,10 +138,10 @@ class PluginInstance(Base):
 
     __tablename__ = "plugin_instances"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    plugin_id = Column(UUID(as_uuid=True), ForeignKey("plugins.id"), nullable=False)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    plugin_id = Column(GUID, ForeignKey("plugins.id"), nullable=False)
     configuration_id = Column(
-        UUID(as_uuid=True), ForeignKey("plugin_configurations.id")
+        GUID, ForeignKey("plugin_configurations.id")
     )
 
     # Runtime information
@@ -181,9 +181,9 @@ class PluginAuditLog(Base):
 
     __tablename__ = "plugin_audit_logs"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    plugin_id = Column(UUID(as_uuid=True), ForeignKey("plugins.id"), nullable=False)
-    instance_id = Column(UUID(as_uuid=True), ForeignKey("plugin_instances.id"))
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    plugin_id = Column(GUID, ForeignKey("plugins.id"), nullable=False)
+    instance_id = Column(GUID, ForeignKey("plugin_instances.id"))
 
     # Event details
     event_type = Column(
@@ -231,8 +231,8 @@ class PluginCronJob(Base):
 
     __tablename__ = "plugin_cron_jobs"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    plugin_id = Column(UUID(as_uuid=True), ForeignKey("plugins.id"), nullable=False)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    plugin_id = Column(GUID, ForeignKey("plugins.id"), nullable=False)
 
     # Job identification
     job_name = Column(String(200), nullable=False)
@@ -284,9 +284,9 @@ class PluginAPIGateway(Base):
 
     __tablename__ = "plugin_api_gateways"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
     plugin_id = Column(
-        UUID(as_uuid=True), ForeignKey("plugins.id"), nullable=False, unique=True
+        GUID, ForeignKey("plugins.id"), nullable=False, unique=True
     )
 
     # API routing configuration
@@ -345,8 +345,8 @@ class PluginPermission(Base):
 
     __tablename__ = "plugin_permissions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    plugin_id = Column(UUID(as_uuid=True), ForeignKey("plugins.id"), nullable=False)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    plugin_id = Column(GUID, ForeignKey("plugins.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Permission details

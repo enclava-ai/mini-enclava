@@ -3,11 +3,11 @@
 import uuid
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import GUID, JSONB
 
 
 class ExtractResult(Base):
@@ -30,9 +30,9 @@ class ExtractResult(Base):
 
     __tablename__ = "extract_results"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
     job_id = Column(
-        UUID(as_uuid=True),
+        GUID,
         ForeignKey("extract_jobs.id", ondelete="CASCADE"),
         nullable=False,
     )

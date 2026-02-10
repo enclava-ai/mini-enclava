@@ -1,0 +1,215 @@
+{# Component Macros for Enclava #}
+
+{# Button Component
+   variant: default, destructive, outline, secondary, ghost, link
+   size: default, sm, lg, icon
+#}
+{% macro button(text='', variant='default', size='default', type='button', disabled=false, class='', hx_attrs={}) %}
+{%- set base_classes = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50' -%}
+{%- set variant_classes = {
+  'default': 'bg-primary text-primary-foreground hover:bg-primary/90',
+  'destructive': 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+  'outline': 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+  'secondary': 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+  'ghost': 'hover:bg-accent hover:text-accent-foreground',
+  'link': 'text-primary underline-offset-4 hover:underline'
+} -%}
+{%- set size_classes = {
+  'default': 'h-10 px-4 py-2',
+  'sm': 'h-9 px-3',
+  'lg': 'h-11 px-8',
+  'icon': 'h-10 w-10'
+} -%}
+<button
+  type="{{ type }}"
+  class="{{ base_classes }} {{ variant_classes[variant] }} {{ size_classes[size] }} {{ class }}"
+  {% if disabled %}disabled{% endif %}
+  {% for attr, value in hx_attrs.items() %}{{ attr }}="{{ value }}"{% endfor %}
+>
+  {%- if caller is defined %}{{ caller() }}{% else %}{{ text }}{% endif -%}
+</button>
+{% endmacro %}
+
+{# Card Component #}
+{% macro card(title='', description='', class='') %}
+<div class="rounded-lg border bg-card text-card-foreground shadow-sm {{ class }}">
+  {% if title or description %}
+  <div class="flex flex-col space-y-1.5 p-6">
+    {% if title %}<h3 class="text-2xl font-semibold leading-none tracking-tight">{{ title }}</h3>{% endif %}
+    {% if description %}<p class="text-sm text-muted-foreground">{{ description }}</p>{% endif %}
+  </div>
+  {% endif %}
+  <div class="p-6 pt-0">
+    {% if caller is defined %}{{ caller() }}{% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{# Card with header and content sections #}
+{% macro card_full(class='') %}
+<div class="rounded-lg border bg-card text-card-foreground shadow-sm {{ class }}">
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{% macro card_header(class='') %}
+<div class="flex flex-col space-y-1.5 p-6 {{ class }}">
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{% macro card_content(class='') %}
+<div class="p-6 pt-0 {{ class }}">
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{% macro card_footer(class='') %}
+<div class="flex items-center p-6 pt-0 {{ class }}">
+  {% if caller is defined %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{# Badge Component
+   variant: default, secondary, destructive, outline
+#}
+{% macro badge(text, variant='default', class='') %}
+{%- set variant_classes = {
+  'default': 'bg-primary text-primary-foreground hover:bg-primary/80',
+  'secondary': 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+  'destructive': 'bg-destructive text-destructive-foreground hover:bg-destructive/80',
+  'outline': 'text-foreground border border-input'
+} -%}
+<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors {{ variant_classes[variant] }} {{ class }}">
+  {{ text }}
+</span>
+{% endmacro %}
+
+{# Progress Bar Component #}
+{% macro progress(value, max=100, class='') %}
+{%- set percentage = (value / max * 100) | round | int -%}
+<div class="relative h-4 w-full overflow-hidden rounded-full bg-secondary/20 {{ class }}">
+  <div
+    class="h-full bg-primary transition-all progress-bar"
+    style="width: {{ percentage }}%"
+    role="progressbar"
+    aria-valuenow="{{ value }}"
+    aria-valuemin="0"
+    aria-valuemax="{{ max }}"
+  ></div>
+</div>
+{% endmacro %}
+
+{# Alert Component
+   type: info, warning, error, success
+#}
+{% macro alert(type='info', title='', message='', class='') %}
+{%- set type_classes = {
+  'info': 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800',
+  'warning': 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-800',
+  'error': 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800',
+  'success': 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border-green-200 dark:border-green-800'
+} -%}
+{%- set icons = {
+  'info': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
+  'warning': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>',
+  'error': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
+  'success': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>'
+} -%}
+<div class="rounded-lg border p-4 {{ type_classes[type] }} {{ class }}" role="alert">
+  <div class="flex items-start gap-3">
+    <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {{ icons[type] | safe }}
+    </svg>
+    <div class="flex-1">
+      {% if title %}<h4 class="font-medium">{{ title }}</h4>{% endif %}
+      {% if message %}<p class="text-sm {% if title %}mt-1{% endif %}">{{ message }}</p>{% endif %}
+      {% if caller is defined %}{{ caller() }}{% endif %}
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{# Stat Card Component - for dashboard #}
+{% macro stat_card(label, value, change='', icon='', class='') %}
+<div class="rounded-lg border bg-card text-card-foreground shadow-sm p-6 {{ class }}">
+  <div class="flex items-center justify-between">
+    <div>
+      <p class="text-sm font-medium text-muted-foreground">{{ label }}</p>
+      <p class="text-2xl font-bold mt-1">{{ value }}</p>
+      {% if change %}
+      <p class="text-sm mt-1 {% if change.startswith('+') %}text-green-600 dark:text-green-400{% elif change.startswith('-') %}text-red-600 dark:text-red-400{% else %}text-muted-foreground{% endif %}">
+        {{ change }}
+      </p>
+      {% endif %}
+    </div>
+    {% if icon %}
+    <div class="p-3 rounded-full bg-primary/10 text-primary">
+      {{ icon | safe }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{# Empty State Component #}
+{% macro empty_state(icon='', title='', description='', action_text='', action_url='', class='') %}
+<div class="flex flex-col items-center justify-center py-12 text-center {{ class }}">
+  {% if icon %}
+  <div class="p-4 rounded-full bg-muted mb-4">
+    {{ icon | safe }}
+  </div>
+  {% endif %}
+  {% if title %}
+  <h3 class="text-lg font-semibold">{{ title }}</h3>
+  {% endif %}
+  {% if description %}
+  <p class="text-sm text-muted-foreground mt-1 max-w-sm">{{ description }}</p>
+  {% endif %}
+  {% if action_text and action_url %}
+  <a href="{{ action_url }}" class="mt-4 inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
+    {{ action_text }}
+  </a>
+  {% endif %}
+  {% if caller is defined %}
+  <div class="mt-4">
+    {{ caller() }}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Loading Spinner #}
+{% macro spinner(size='default', class='') %}
+{%- set size_classes = {
+  'sm': 'h-4 w-4 border-2',
+  'default': 'h-6 w-6 border-2',
+  'lg': 'h-8 w-8 border-3'
+} -%}
+<div class="animate-spin rounded-full border-current border-t-transparent {{ size_classes[size] }} {{ class }}" role="status">
+  <span class="sr-only">Loading...</span>
+</div>
+{% endmacro %}
+
+{# Icon helper - common icons #}
+{% macro icon(name, class='h-5 w-5') %}
+{%- set icons = {
+  'key': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>',
+  'chart': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>',
+  'document': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>',
+  'wallet': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>',
+  'cog': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>',
+  'plus': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>',
+  'pencil': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>',
+  'trash': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>',
+  'eye': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>',
+  'clipboard': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>',
+  'refresh': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>',
+  'check': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>',
+  'x': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>',
+  'upload': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>'
+} -%}
+<svg class="{{ class }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  {{ icons.get(name, icons['document']) | safe }}
+</svg>
+{% endmacro %}

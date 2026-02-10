@@ -1,0 +1,42 @@
+{# Navigation partial - for mobile menu updates via HTMX #}
+
+<div class="flex items-center">
+  <!-- Logo -->
+  <a href="/dashboard" class="flex items-center">
+    <span class="text-xl font-display font-bold gradient-text">Enclava</span>
+  </a>
+
+  <!-- Desktop nav links -->
+  <div class="hidden lg:flex lg:items-center lg:ml-10 lg:space-x-4">
+    <a
+      href="/dashboard"
+      class="px-3 py-2 rounded-md text-sm font-medium {% if active == 'dashboard' %}text-foreground bg-muted{% else %}text-muted-foreground hover:text-foreground hover:bg-muted{% endif %}"
+    >
+      Dashboard
+    </a>
+    <a
+      href="/extract"
+      class="px-3 py-2 rounded-md text-sm font-medium {% if active == 'extract' %}text-foreground bg-muted{% else %}text-muted-foreground hover:text-foreground hover:bg-muted{% endif %}"
+    >
+      Extract
+    </a>
+    <a
+      href="/api-keys"
+      class="px-3 py-2 rounded-md text-sm font-medium {% if active == 'api-keys' %}text-foreground bg-muted{% else %}text-muted-foreground hover:text-foreground hover:bg-muted{% endif %}"
+    >
+      API Keys
+    </a>
+    <a
+      href="/budgets"
+      class="px-3 py-2 rounded-md text-sm font-medium {% if active == 'budgets' %}text-foreground bg-muted{% else %}text-muted-foreground hover:text-foreground hover:bg-muted{% endif %}"
+    >
+      Budgets
+    </a>
+    <a
+      href="/analytics"
+      class="px-3 py-2 rounded-md text-sm font-medium {% if active == 'analytics' %}text-foreground bg-muted{% else %}text-muted-foreground hover:text-foreground hover:bg-muted{% endif %}"
+    >
+      Analytics
+    </a>
+  </div>
+</div>

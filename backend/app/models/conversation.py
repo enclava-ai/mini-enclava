@@ -48,10 +48,12 @@ class Conversation(Base):
     api_key = relationship("APIKey", foreign_keys=[api_key_id])
 
     # Indexes
+    # Note: postgresql_where partial indexes removed for SQLite compatibility
+    # Full indexes used instead (slight storage overhead but works cross-database)
     __table_args__ = (
         Index("idx_conversations_id", "id"),
-        Index("idx_conversations_user_id", "user_id", postgresql_where=(user_id.isnot(None))),
-        Index("idx_conversations_api_key_id", "api_key_id", postgresql_where=(api_key_id.isnot(None))),
+        Index("idx_conversations_user_id", "user_id"),
+        Index("idx_conversations_api_key_id", "api_key_id"),
         Index("idx_conversations_created_at", "created_at"),
         Index("idx_conversations_updated_at", "updated_at"),
     )

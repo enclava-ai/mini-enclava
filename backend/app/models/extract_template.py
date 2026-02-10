@@ -3,10 +3,10 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+from app.db.types import JSONB
 
 
 class ExtractTemplate(Base):

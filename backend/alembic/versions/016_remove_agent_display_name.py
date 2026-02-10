@@ -8,6 +8,7 @@ Create Date: 2024-12-20
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 
 # revision identifiers, used by Alembic.
@@ -33,4 +34,8 @@ def downgrade():
     op.execute("UPDATE agent_configs SET display_name = name WHERE display_name IS NULL")
 
     # Make it non-nullable after populating
-    op.alter_column('agent_configs', 'display_name', nullable=False)
+    if is_sqlite():
+        with op.batch_alter_table('agent_configs') as batch_op:
+            batch_op.alter_column('display_name', nullable=False)
+    else:
+        op.alter_column('agent_configs', 'display_name', nullable=False)

@@ -5,13 +5,17 @@ model files in the codebase. All legacy migrations have been consolidated into t
 single migration to ensure the database matches what the models expect.
 
 Revision ID: 000_ground_truth
-Revises: 
+Revises:
 Create Date: 2025-08-22 10:30:00.000000
 
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from app.db.migrations import (
+    is_postgresql, is_sqlite,
+    uuid_column, jsonb_column, timestamp_default,
+    create_enum, drop_enum, enum_column
+)
 
 # revision identifiers, used by Alembic.
 revision = '000_ground_truth'
@@ -19,19 +23,15 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+# Workflow status values for cross-database compatibility
+WORKFLOW_STATUS_VALUES = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']
+
 
 def upgrade() -> None:
     """Create the complete database schema based on actual model definitions"""
-    
-    # Create WorkflowStatus enum using raw SQL to avoid SQLAlchemy conflicts
-    op.execute("CREATE TYPE workflowstatus AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')")
-    
-    # Define the enum for use in table definitions
-    workflow_status_enum = postgresql.ENUM(
-        'PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 
-        name='workflowstatus',
-        create_type=False  # Don't auto-create since we created it above
-    )
+
+    # Create WorkflowStatus enum (PostgreSQL only, no-op on SQLite)
+    workflow_status_enum = create_enum('workflowstatus', WORKFLOW_STATUS_VALUES)
 
     # ========================================
     # CORE USER MANAGEMENT
@@ -218,8 +218,8 @@ def upgrade() -> None:
         sa.Column('vector_count', sa.Integer(), nullable=False, default=0),
         sa.Column('status', sa.String(length=50), nullable=False, default='active'),
         sa.Column('is_active', sa.Boolean(), nullable=False, default=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=timestamp_default(), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=timestamp_default(), nullable=False),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_rag_collections_id'), 'rag_collections', ['id'], unique=False)
@@ -244,10 +244,10 @@ def upgrade() -> None:
         sa.Column('vector_count', sa.Integer(), nullable=False, default=0),
         sa.Column('chunk_size', sa.Integer(), nullable=False, default=1000),
         sa.Column('document_metadata', sa.JSON(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=timestamp_default(), nullable=False),
         sa.Column('processed_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('indexed_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=timestamp_default(), nullable=False),
         sa.Column('is_deleted', sa.Boolean(), nullable=False, default=False),
         sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['collection_id'], ['rag_collections.id'], ondelete='CASCADE'),
@@ -331,8 +331,8 @@ def upgrade() -> None:
         sa.Column('is_default', sa.Boolean(), nullable=False, default=True),
         sa.Column('is_active', sa.Boolean(), nullable=False, default=True),
         sa.Column('version', sa.Integer(), nullable=False, default=1),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=timestamp_default(), nullable=True),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=timestamp_default(), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_prompt_templates_id'), 'prompt_templates', ['id'], unique=False)
@@ -346,7 +346,7 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('example_value', sa.String(length=500), nullable=True),
         sa.Column('is_active', sa.Boolean(), nullable=False, default=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=timestamp_default(), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_prompt_variables_id'), 'prompt_variables', ['id'], unique=False)
@@ -377,7 +377,7 @@ def upgrade() -> None:
     op.create_table('workflow_executions',
         sa.Column('id', sa.String(), nullable=False),
         sa.Column('workflow_id', sa.String(), nullable=False),
-        sa.Column('status', workflow_status_enum, nullable=True),
+        sa.Column('status', enum_column('workflowstatus', WORKFLOW_STATUS_VALUES), nullable=True),
         sa.Column('current_step', sa.String(), nullable=True),
         sa.Column('input_data', sa.JSON(), nullable=True),
         sa.Column('context', sa.JSON(), nullable=True),
@@ -465,7 +465,7 @@ def upgrade() -> None:
     
     # Create plugins table (based on actual model - UUID)
     op.create_table('plugins',
-        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('id', uuid_column(), nullable=False),
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column('slug', sa.String(length=100), nullable=False),
         sa.Column('display_name', sa.String(length=200), nullable=False),
@@ -496,7 +496,8 @@ def upgrade() -> None:
         sa.Column('error_count', sa.Integer(), nullable=True, default=0),
         sa.Column('last_error_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['installed_by_user_id'], ['users.id'], ),
-        sa.PrimaryKeyConstraint('id')
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('database_name', name='uq_plugins_database_name')
     )
     op.create_index('idx_plugin_status_enabled', 'plugins', ['status', 'enabled'], unique=False)
     op.create_index('idx_plugin_user_status', 'plugins', ['installed_by_user_id', 'status'], unique=False)
@@ -504,12 +505,11 @@ def upgrade() -> None:
     op.create_index(op.f('ix_plugins_slug'), 'plugins', ['slug'], unique=True)
     op.create_index(op.f('ix_plugins_enabled'), 'plugins', ['enabled'], unique=False)
     op.create_index(op.f('ix_plugins_status'), 'plugins', ['status'], unique=False)
-    op.create_unique_constraint(None, 'plugins', ['database_name'])
 
     # Create plugin_configurations table (based on actual model - UUID)
     op.create_table('plugin_configurations',
-        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('plugin_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('id', uuid_column(), nullable=False),
+        sa.Column('plugin_id', uuid_column(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('name', sa.String(length=200), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
@@ -530,9 +530,9 @@ def upgrade() -> None:
 
     # Create plugin_instances table (based on actual model - UUID)
     op.create_table('plugin_instances',
-        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('plugin_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('configuration_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('id', uuid_column(), nullable=False),
+        sa.Column('plugin_id', uuid_column(), nullable=False),
+        sa.Column('configuration_id', uuid_column(), nullable=True),
         sa.Column('instance_name', sa.String(length=200), nullable=False),
         sa.Column('process_id', sa.String(length=100), nullable=True),
         sa.Column('status', sa.String(length=20), nullable=False, default="starting"),
@@ -556,9 +556,9 @@ def upgrade() -> None:
 
     # Create plugin_audit_logs table (based on actual model - UUID)
     op.create_table('plugin_audit_logs',
-        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('plugin_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('instance_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('id', uuid_column(), nullable=False),
+        sa.Column('plugin_id', uuid_column(), nullable=False),
+        sa.Column('instance_id', uuid_column(), nullable=True),
         sa.Column('event_type', sa.String(length=50), nullable=False),
         sa.Column('action', sa.String(length=100), nullable=False),
         sa.Column('resource', sa.String(length=200), nullable=True),
@@ -588,8 +588,8 @@ def upgrade() -> None:
 
     # Create plugin_cron_jobs table (based on actual model - UUID)
     op.create_table('plugin_cron_jobs',
-        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('plugin_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('id', uuid_column(), nullable=False),
+        sa.Column('plugin_id', uuid_column(), nullable=False),
         sa.Column('job_name', sa.String(length=200), nullable=False),
         sa.Column('job_id', sa.String(length=100), nullable=False),
         sa.Column('schedule', sa.String(length=100), nullable=False),
@@ -623,8 +623,8 @@ def upgrade() -> None:
 
     # Create plugin_api_gateways table (based on actual model - UUID)
     op.create_table('plugin_api_gateways',
-        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('plugin_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('id', uuid_column(), nullable=False),
+        sa.Column('plugin_id', uuid_column(), nullable=False),
         sa.Column('base_path', sa.String(length=200), nullable=False),
         sa.Column('internal_url', sa.String(length=500), nullable=False),
         sa.Column('require_authentication', sa.Boolean(), nullable=False, default=True),
@@ -644,16 +644,16 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['plugin_id'], ['plugins.id'], ),
-        sa.PrimaryKeyConstraint('id')
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('base_path'),
+        sa.UniqueConstraint('plugin_id')
     )
     op.create_index(op.f('ix_plugin_api_gateways_enabled'), 'plugin_api_gateways', ['enabled'], unique=False)
-    op.create_unique_constraint(None, 'plugin_api_gateways', ['base_path'])
-    op.create_unique_constraint(None, 'plugin_api_gateways', ['plugin_id'])
 
     # Create plugin_permissions table (based on actual model - UUID)
     op.create_table('plugin_permissions',
-        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('plugin_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('id', uuid_column(), nullable=False),
+        sa.Column('plugin_id', uuid_column(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('permission_name', sa.String(length=200), nullable=False),
         sa.Column('granted', sa.Boolean(), nullable=False, default=True),
@@ -721,5 +721,5 @@ def downgrade() -> None:
     # Drop users (base table)
     op.drop_table('users')
     
-    # Drop enums
-    op.execute('DROP TYPE workflowstatus')
+    # Drop enums (PostgreSQL only)
+    drop_enum('workflowstatus')

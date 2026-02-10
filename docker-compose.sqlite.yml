@@ -1,0 +1,94 @@
+# ===================================
+# ENCLAVA - SQLITE + EXTRACT-ONLY
+# ===================================
+# Minimal deployment with SQLite database
+# No PostgreSQL, No Redis, No Qdrant needed
+#
+# Usage:
+#   docker compose -f docker-compose.sqlite.yml up --build
+#
+# Environment variables (set in .env):
+#   - JWT_SECRET (required)
+#   - PRIVATEMODE_API_KEY or REDPILL_API_KEY (at least one required)
+#   - ADMIN_EMAIL, ADMIN_PASSWORD (for initial admin user)
+
+services:
+  # Database migration service - runs once to apply migrations
+  enclava-migrate:
+    container_name: enclava-migrate
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=sqlite:////app/data/enclava.db
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - BASE_URL=${BASE_URL:-localhost}
+      - PLUGINS_ENABLED=false
+    command: ["/usr/local/bin/migrate.sh"]
+    volumes:
+      - ./backend:/app:z
+      - enclava-sqlite-data:/app/data:z
+    networks:
+      - enclava-net
+    restart: "no"
+    security_opt:
+      - label=disable
+
+  # Main application backend
+  enclava-backend:
+    container_name: enclava-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      # SQLite database
+      - DATABASE_URL=sqlite:////app/data/enclava.db
+      # Security
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
+      - BASE_URL=${BASE_URL:-localhost}
+      # Admin user
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      # LLM Providers
+      - PRIVATEMODE_API_KEY=${PRIVATEMODE_API_KEY:-}
+      - REDPILL_API_KEY=${REDPILL_API_KEY:-}
+      - REDPILL_BASE_URL=${REDPILL_BASE_URL:-https://api.redpill.ai/v1}
+      - REDPILL_TEST_MODEL=${REDPILL_TEST_MODEL:-phala/deepseek-v3.2}
+      # Skip attestation verification (for testing only)
+      - SKIP_ATTESTATION_CHECK=true
+      # Extract-only modules
+      - EXTRACT_ENABLED=true
+      - CHATBOTS_ENABLED=false
+      - AGENTS_ENABLED=false
+      - RAG_ENABLED=false
+      - PLUGINS_ENABLED=false
+      - REDIS_ENABLED=false
+      - ANALYTICS_ENABLED=false
+      - AUDIT_ENABLED=false
+      - BUILTIN_TOOLS_ENABLED=false
+      - PROMETHEUS_ENABLED=false
+      # Logging
+      - LOG_LLM_PROMPTS=${LOG_LLM_PROMPTS:-false}
+    depends_on:
+      enclava-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"  # Direct backend access (no nginx)
+    volumes:
+      - ./backend:/app:z
+      - ./logs:/app/logs:z
+      - enclava-sqlite-data:/app/data:z
+    networks:
+      - enclava-net
+    restart: unless-stopped
+    security_opt:
+      - label=disable
+
+volumes:
+  enclava-sqlite-data:
+
+networks:
+  enclava-net:
+    driver: bridge

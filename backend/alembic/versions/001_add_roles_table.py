@@ -7,6 +7,7 @@ Create Date: 2025-01-30 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 # revision identifiers
 revision = '001_add_roles_table'
@@ -43,16 +44,27 @@ def upgrade():
 
     # Add role_id to users table
     op.add_column('users', sa.Column('role_id', sa.Integer(), nullable=True))
-    op.create_foreign_key(
-        'fk_users_role_id', 'users', 'roles',
-        ['role_id'], ['id'], ondelete='SET NULL'
-    )
+    if is_sqlite():
+        with op.batch_alter_table('users') as batch_op:
+            batch_op.create_foreign_key(
+                'fk_users_role_id', 'roles',
+                ['role_id'], ['id'], ondelete='SET NULL'
+            )
+    else:
+        op.create_foreign_key(
+            'fk_users_role_id', 'users', 'roles',
+            ['role_id'], ['id'], ondelete='SET NULL'
+        )
     op.create_index('ix_users_role_id', 'users', ['role_id'])
 
 def downgrade():
     # Remove role_id from users
     op.drop_index('ix_users_role_id', table_name='users')
-    op.drop_constraint('fk_users_role_id', table_name='users', type_='foreignkey')
+    if is_sqlite():
+        with op.batch_alter_table('users') as batch_op:
+            batch_op.drop_constraint('fk_users_role_id', type_='foreignkey')
+    else:
+        op.drop_constraint('fk_users_role_id', table_name='users', type_='foreignkey')
     op.drop_column('users', 'role_id')
 
     # Drop roles table

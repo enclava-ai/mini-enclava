@@ -1,6 +1,9 @@
 """
 Plugin Database Isolation Infrastructure
 Provides isolated database schemas and secure database access for plugins
+
+NOTE: Schema-based plugin isolation requires PostgreSQL. SQLite deployments
+do not support plugin database isolation - plugins will share the main database.
 """
 import asyncio
 import hashlib
@@ -23,6 +26,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.plugin import Plugin, PluginConfiguration
 from app.db.database import get_db
+from app.db.dialect import is_sqlite, is_postgresql
 from app.utils.exceptions import PluginError, DatabaseError
 
 
@@ -40,7 +44,20 @@ class PluginDatabaseManager:
     async def create_plugin_schema(
         self, plugin_id: str, manifest_data: Dict[str, Any]
     ) -> bool:
-        """Create isolated database schema for plugin"""
+        """Create isolated database schema for plugin
+
+        NOTE: Schema isolation requires PostgreSQL. On SQLite, plugins share
+        the main database without isolation.
+        """
+        # SQLite doesn't support schemas - plugins share the main database
+        if is_sqlite():
+            logger.warning(
+                f"Plugin database isolation not supported on SQLite. "
+                f"Plugin {plugin_id} will use the main database."
+            )
+            self.schema_cache[plugin_id] = True
+            return True
+
         try:
             schema_name = f"plugin_{plugin_id}"
 
@@ -71,7 +88,19 @@ class PluginDatabaseManager:
             raise PluginError(f"Database schema creation failed: {e}")
 
     async def delete_plugin_schema(self, plugin_id: str) -> bool:
-        """Delete plugin database schema (DANGEROUS - used for uninstall)"""
+        """Delete plugin database schema (DANGEROUS - used for uninstall)
+
+        NOTE: On SQLite, this is a no-op since plugins share the main database.
+        """
+        # SQLite doesn't support schemas - nothing to delete
+        if is_sqlite():
+            logger.info(
+                f"Plugin {plugin_id} used shared database (SQLite), no schema to delete."
+            )
+            if plugin_id in self.schema_cache:
+                del self.schema_cache[plugin_id]
+            return True
+
         try:
             schema_name = f"plugin_{plugin_id}"
 
@@ -124,7 +153,15 @@ class PluginDatabaseManager:
         return True
 
     async def _create_schema_if_not_exists(self, schema_name: str):
-        """Create database schema if it doesn't exist"""
+        """Create database schema if it doesn't exist
+
+        NOTE: This is PostgreSQL-specific. SQLite doesn't support schemas.
+        """
+        # SQLite doesn't support schemas - this should not be called
+        if is_sqlite():
+            logger.warning("Schema creation not supported on SQLite")
+            return
+
         # Use synchronous database connection
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy import create_engine
@@ -134,7 +171,7 @@ class PluginDatabaseManager:
         db = SessionLocal()
 
         try:
-            # Check if schema exists
+            # Check if schema exists (PostgreSQL)
             result = db.execute(
                 text(
                     "SELECT schema_name FROM information_schema.schemata WHERE schema_name = :schema_name"
@@ -146,7 +183,7 @@ class PluginDatabaseManager:
                 logger.debug(f"Schema {schema_name} already exists")
                 return
 
-            # Create schema
+            # Create schema (PostgreSQL)
             db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
             db.commit()
 
@@ -159,7 +196,15 @@ class PluginDatabaseManager:
             db.close()
 
     async def _drop_schema(self, schema_name: str):
-        """Drop database schema and all its contents"""
+        """Drop database schema and all its contents
+
+        NOTE: This is PostgreSQL-specific. SQLite doesn't support schemas.
+        """
+        # SQLite doesn't support schemas - this should not be called
+        if is_sqlite():
+            logger.warning("Schema deletion not supported on SQLite")
+            return
+
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy import create_engine
 
@@ -168,7 +213,7 @@ class PluginDatabaseManager:
         db = SessionLocal()
 
         try:
-            # Drop schema with CASCADE to remove all objects
+            # Drop schema with CASCADE to remove all objects (PostgreSQL)
             db.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
             db.commit()
 
@@ -183,7 +228,17 @@ class PluginDatabaseManager:
     async def _create_plugin_database_connection(
         self, plugin_id: str, schema_name: str
     ):
-        """Create database engine and session for plugin"""
+        """Create database engine and session for plugin
+
+        NOTE: On SQLite, plugins use the main database connection (no isolation).
+        """
+        # SQLite doesn't support schemas - plugins use main database
+        if is_sqlite():
+            logger.info(
+                f"Plugin {plugin_id} using main database connection (SQLite)"
+            )
+            return
+
         try:
             # Create engine with schema-specific connection
             database_url = settings.DATABASE_URL
@@ -261,7 +316,19 @@ class PluginDatabaseManager:
             raise PluginError(f"Migration failed: {e}")
 
     async def backup_plugin_data(self, plugin_id: str) -> Optional[str]:
-        """Create backup of plugin data"""
+        """Create backup of plugin data
+
+        NOTE: Plugin backups require PostgreSQL. SQLite deployments do not
+        support plugin-specific backups (use full database backup instead).
+        """
+        # SQLite doesn't support schema isolation or pg_dump
+        if is_sqlite():
+            logger.warning(
+                f"Plugin backup not supported on SQLite. "
+                f"Use full database backup instead for plugin {plugin_id}."
+            )
+            return None
+
         try:
             schema_name = f"plugin_{plugin_id}"
 
@@ -384,7 +451,19 @@ class PluginDatabaseManager:
             return None
 
     async def restore_plugin_data(self, plugin_id: str, backup_file: str) -> bool:
-        """Restore plugin data from backup"""
+        """Restore plugin data from backup
+
+        NOTE: Plugin restore requires PostgreSQL. SQLite deployments do not
+        support plugin-specific restore (use full database restore instead).
+        """
+        # SQLite doesn't support schema isolation or psql
+        if is_sqlite():
+            logger.warning(
+                f"Plugin restore not supported on SQLite. "
+                f"Use full database restore instead for plugin {plugin_id}."
+            )
+            return False
+
         try:
             schema_name = f"plugin_{plugin_id}"
             backup_path = Path(backup_file)
@@ -607,7 +686,20 @@ class PluginDatabaseManager:
             return []
 
     async def get_plugin_database_stats(self, plugin_id: str) -> Dict[str, Any]:
-        """Get database statistics for plugin"""
+        """Get database statistics for plugin
+
+        NOTE: On SQLite, returns limited stats since schema isolation is not supported.
+        """
+        # SQLite doesn't have schema isolation
+        if is_sqlite():
+            return {
+                "schema_name": "main",
+                "table_count": 0,
+                "total_size": "not available (SQLite)",
+                "plugin_id": plugin_id,
+                "note": "Plugin database isolation not supported on SQLite",
+            }
+
         try:
             schema_name = f"plugin_{plugin_id}"
 
@@ -620,12 +712,12 @@ class PluginDatabaseManager:
             db = SessionLocal()
 
             try:
-                # Get table count
+                # Get table count (PostgreSQL)
                 result = db.execute(
                     text(
                         """
-                        SELECT COUNT(*) as table_count 
-                        FROM information_schema.tables 
+                        SELECT COUNT(*) as table_count
+                        FROM information_schema.tables
                         WHERE table_schema = :schema_name
                     """
                     ),

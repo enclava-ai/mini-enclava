@@ -9,6 +9,7 @@ sqlalchemy==2.0.23
 alembic==1.12.1
 psycopg2-binary==2.9.9
 asyncpg==0.29.0
+aiosqlite>=0.19.0
 
 # Redis (includes async support, no need for separate aioredis)
 redis==5.0.1

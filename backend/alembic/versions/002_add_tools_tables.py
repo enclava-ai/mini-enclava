@@ -7,6 +7,7 @@ Create Date: 2025-01-30 00:00:01.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from app.db.migrations import is_sqlite
 
 # revision identifiers
 revision = '002_add_tools_tables'
@@ -33,7 +34,7 @@ def upgrade():
     op.create_index(op.f('ix_tool_categories_id'), 'tool_categories', ['id'], unique=False)
     op.create_index(op.f('ix_tool_categories_name'), 'tool_categories', ['name'], unique=True)
 
-    # Create tools table
+    # Create tools table (FK included in create_table for SQLite compat)
     op.create_table(
         'tools',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -59,16 +60,13 @@ def upgrade():
         sa.Column('is_active', sa.Boolean(), nullable=True, default=True),
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(['created_by_user_id'], ['users.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_tools_id'), 'tools', ['id'], unique=False)
     op.create_index(op.f('ix_tools_name'), 'tools', ['name'], unique=False)
-    op.create_foreign_key(
-        'fk_tools_created_by_user_id', 'tools', 'users',
-        ['created_by_user_id'], ['id'], ondelete='CASCADE'
-    )
 
-    # Create tool_executions table
+    # Create tool_executions table (FKs included in create_table for SQLite compat)
     op.create_table(
         'tool_executions',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -87,27 +85,23 @@ def upgrade():
         sa.Column('started_at', sa.DateTime(), nullable=True),
         sa.Column('completed_at', sa.DateTime(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(['tool_id'], ['tools.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['executed_by_user_id'], ['users.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_tool_executions_id'), 'tool_executions', ['id'], unique=False)
-    op.create_foreign_key(
-        'fk_tool_executions_tool_id', 'tool_executions', 'tools',
-        ['tool_id'], ['id'], ondelete='CASCADE'
-    )
-    op.create_foreign_key(
-        'fk_tool_executions_executed_by_user_id', 'tool_executions', 'users',
-        ['executed_by_user_id'], ['id'], ondelete='CASCADE'
-    )
 
 def downgrade():
     # Drop tool_executions table
-    op.drop_constraint('fk_tool_executions_executed_by_user_id', table_name='tool_executions', type_='foreignkey')
-    op.drop_constraint('fk_tool_executions_tool_id', table_name='tool_executions', type_='foreignkey')
+    if not is_sqlite():
+        op.drop_constraint('fk_tool_executions_executed_by_user_id', table_name='tool_executions', type_='foreignkey')
+        op.drop_constraint('fk_tool_executions_tool_id', table_name='tool_executions', type_='foreignkey')
     op.drop_index(op.f('ix_tool_executions_id'), table_name='tool_executions')
     op.drop_table('tool_executions')
 
     # Drop tools table
-    op.drop_constraint('fk_tools_created_by_user_id', table_name='tools', type_='foreignkey')
+    if not is_sqlite():
+        op.drop_constraint('fk_tools_created_by_user_id', table_name='tools', type_='foreignkey')
     op.drop_index(op.f('ix_tools_name'), table_name='tools')
     op.drop_index(op.f('ix_tools_id'), table_name='tools')
     op.drop_table('tools')
