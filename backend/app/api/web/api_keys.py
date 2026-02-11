@@ -10,6 +10,7 @@ import secrets
 
 from app.core.templates import templates
 from app.core.web_auth import get_current_user_from_session, get_csrf_token, verify_csrf_token
+from app.core.security import get_api_key_hash
 from app.db.database import get_db
 from app.models.user import User
 from app.models.api_key import APIKey
@@ -17,9 +18,15 @@ from app.models.api_key import APIKey
 router = APIRouter()
 
 
-def generate_api_key() -> str:
-    """Generate a secure API key."""
-    return f"enc_{secrets.token_urlsafe(32)}"
+def generate_api_key() -> tuple[str, str]:
+    """Generate a secure API key and its hash.
+
+    Returns:
+        Tuple of (full_key, key_hash)
+    """
+    full_key = f"enc_{secrets.token_urlsafe(32)}"
+    key_hash = get_api_key_hash(full_key)
+    return full_key, key_hash
 
 
 @router.get("/api-keys", response_class=HTMLResponse)
@@ -94,8 +101,8 @@ async def create_api_key(
     if not verify_csrf_token(request, csrf_token):
         raise HTTPException(status_code=403, detail="Invalid CSRF token")
 
-    # Generate the key
-    key_value = generate_api_key()
+    # Generate the key and hash it
+    key_value, key_hash = generate_api_key()
 
     # Parse expiration date if provided
     expiration = None
@@ -105,11 +112,11 @@ async def create_api_key(
         except ValueError:
             pass
 
-    # Create the API key
+    # Create the API key with hashed key
     api_key = APIKey(
         name=name,
         description=description,
-        key=key_value,
+        key_hash=key_hash,
         key_prefix=key_value[:12],
         user_id=user.id,
         is_active=True,
@@ -193,9 +200,9 @@ async def regenerate_api_key(
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")
 
-    # Generate new key
-    new_key = generate_api_key()
-    api_key.key = new_key
+    # Generate new key and hash it
+    new_key, new_key_hash = generate_api_key()
+    api_key.key_hash = new_key_hash
     api_key.key_prefix = new_key[:12]
     await db.commit()
 
