@@ -14,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -276,6 +277,9 @@ app = FastAPI(
 )
 
 # Add middleware
+# Trust proxy headers for proper HTTPS URL generation behind reverse proxy
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
