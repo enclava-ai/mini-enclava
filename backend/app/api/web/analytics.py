@@ -10,7 +10,7 @@ from app.core.templates import templates
 from app.core.web_auth import get_current_user_from_session, get_csrf_token
 from app.db.database import get_db
 from app.models.user import User
-from app.models.usage_tracking import UsageTracking
+from app.models.usage_record import UsageRecord
 
 router = APIRouter()
 
@@ -29,30 +29,30 @@ async def analytics_page(
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
 
-    # Get analytics data from UsageTracking
+    # Get analytics data from UsageRecord (the actual usage table)
     # Total requests
     total_requests_result = await db.execute(
-        select(func.count(UsageTracking.id)).where(
-            UsageTracking.user_id == user.id,
-            UsageTracking.created_at >= start_date,
+        select(func.count(UsageRecord.id)).where(
+            UsageRecord.user_id == user.id,
+            UsageRecord.created_at >= start_date,
         )
     )
     total_requests = total_requests_result.scalar() or 0
 
     # Total tokens
     total_tokens_result = await db.execute(
-        select(func.sum(UsageTracking.total_tokens)).where(
-            UsageTracking.user_id == user.id,
-            UsageTracking.created_at >= start_date,
+        select(func.sum(UsageRecord.total_tokens)).where(
+            UsageRecord.user_id == user.id,
+            UsageRecord.created_at >= start_date,
         )
     )
     total_tokens = total_tokens_result.scalar() or 0
 
     # Total cost (in cents, convert to dollars)
     total_cost_result = await db.execute(
-        select(func.sum(UsageTracking.cost_cents)).where(
-            UsageTracking.user_id == user.id,
-            UsageTracking.created_at >= start_date,
+        select(func.sum(UsageRecord.total_cost_cents)).where(
+            UsageRecord.user_id == user.id,
+            UsageRecord.created_at >= start_date,
         )
     )
     total_cost_cents = total_cost_result.scalar() or 0
@@ -61,15 +61,15 @@ async def analytics_page(
     # Usage by endpoint
     endpoint_usage_result = await db.execute(
         select(
-            UsageTracking.endpoint,
-            func.count(UsageTracking.id).label("count"),
+            UsageRecord.endpoint,
+            func.count(UsageRecord.id).label("count"),
         )
         .where(
-            UsageTracking.user_id == user.id,
-            UsageTracking.created_at >= start_date,
+            UsageRecord.user_id == user.id,
+            UsageRecord.created_at >= start_date,
         )
-        .group_by(UsageTracking.endpoint)
-        .order_by(func.count(UsageTracking.id).desc())
+        .group_by(UsageRecord.endpoint)
+        .order_by(func.count(UsageRecord.id).desc())
         .limit(10)
     )
     endpoint_usage = endpoint_usage_result.all()
@@ -77,17 +77,17 @@ async def analytics_page(
     # Usage by model
     model_usage_result = await db.execute(
         select(
-            UsageTracking.model,
-            func.count(UsageTracking.id).label("count"),
-            func.sum(UsageTracking.total_tokens).label("tokens"),
+            UsageRecord.normalized_model,
+            func.count(UsageRecord.id).label("count"),
+            func.sum(UsageRecord.total_tokens).label("tokens"),
         )
         .where(
-            UsageTracking.user_id == user.id,
-            UsageTracking.created_at >= start_date,
-            UsageTracking.model.isnot(None),
+            UsageRecord.user_id == user.id,
+            UsageRecord.created_at >= start_date,
+            UsageRecord.normalized_model.isnot(None),
         )
-        .group_by(UsageTracking.model)
-        .order_by(func.count(UsageTracking.id).desc())
+        .group_by(UsageRecord.normalized_model)
+        .order_by(func.count(UsageRecord.id).desc())
         .limit(10)
     )
     model_usage = model_usage_result.all()
