@@ -6,14 +6,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 from decimal import Decimal
+from datetime import datetime, timedelta
 
 from app.core.templates import templates
 from app.core.web_auth import get_current_user_from_session, get_csrf_token, verify_csrf_token
-from app.db.database import get_db
+from app.db.database import get_db, utc_now
 from app.models.user import User
 from app.models.budget import Budget
 
 router = APIRouter()
+
+
+def _calculate_period_dates(period_type: str) -> tuple[datetime, datetime]:
+    """Calculate period start and end dates based on period type."""
+    now = utc_now()
+    if period_type == "daily":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+    elif period_type == "weekly":
+        start = now - timedelta(days=now.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(weeks=1)
+    elif period_type == "yearly":
+        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = start.replace(year=start.year + 1)
+    else:  # monthly (default)
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if start.month == 12:
+            end = start.replace(year=start.year + 1, month=1)
+        else:
+            end = start.replace(month=start.month + 1)
+    return start, end
 
 
 @router.get("/budgets", response_class=HTMLResponse)
@@ -61,19 +84,29 @@ async def create_budget(
         raise HTTPException(status_code=403, detail="Invalid CSRF token")
 
     try:
-        amount_decimal = Decimal(amount)
-        warning_decimal = Decimal(warning_threshold)
+        # Convert dollars to cents
+        amount_dollars = Decimal(amount)
+        limit_cents = int(amount_dollars * 100)
+
+        # Convert warning threshold percentage to cents
+        warning_pct = Decimal(warning_threshold)
+        warning_threshold_cents = int((warning_pct / 100) * limit_cents)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid amount or threshold")
 
+    # Calculate period dates
+    period_start, period_end = _calculate_period_dates(period)
+
     budget = Budget(
         name=name,
-        amount=amount_decimal,
-        period=period,
-        warning_threshold=warning_decimal,
+        limit_cents=limit_cents,
+        period_type=period,
+        warning_threshold_cents=warning_threshold_cents,
         auto_renew=auto_renew,
         user_id=user.id,
-        spent=Decimal("0"),
+        current_usage_cents=0,
+        period_start=period_start,
+        period_end=period_end,
     )
     db.add(budget)
     await db.commit()
@@ -137,14 +170,29 @@ async def update_budget(
         raise HTTPException(status_code=404, detail="Budget not found")
 
     try:
+        # Convert dollars to cents
+        amount_dollars = Decimal(amount)
+        limit_cents = int(amount_dollars * 100)
+
+        # Convert warning threshold percentage to cents
+        warning_pct = Decimal(warning_threshold)
+        warning_threshold_cents = int((warning_pct / 100) * limit_cents)
+
         budget.name = name
-        budget.amount = Decimal(amount)
-        budget.period = period
-        budget.warning_threshold = Decimal(warning_threshold)
+        budget.limit_cents = limit_cents
+        budget.period_type = period
+        budget.warning_threshold_cents = warning_threshold_cents
         budget.auto_renew = auto_renew
+
+        # Update period dates if period type changed
+        if budget.period_type != period:
+            period_start, period_end = _calculate_period_dates(period)
+            budget.period_start = period_start
+            budget.period_end = period_end
+
         await db.commit()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid budget data")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid budget data: {str(e)}")
 
     # Return updated budget list
     return await get_budget_list(request, user, db)
