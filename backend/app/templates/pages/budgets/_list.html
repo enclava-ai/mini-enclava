@@ -4,16 +4,16 @@
 {% if budgets %}
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
   {% for budget in budgets %}
-  {% set spent = budget.spent | float %}
-  {% set amount = budget.amount | float %}
+  {% set spent = (budget.current_usage_cents or 0) / 100 %}
+  {% set amount = (budget.limit_cents or 0) / 100 %}
   {% set percentage = (spent / amount * 100) | round | int if amount > 0 else 0 %}
-  {% set warning_threshold = budget.warning_threshold | float %}
+  {% set warning_pct = ((budget.warning_threshold_cents or 0) / budget.limit_cents * 100) | round | int if budget.limit_cents else 80 %}
 
   <div class="rounded-lg border bg-card p-6" id="budget-{{ budget.id }}">
     <div class="flex items-start justify-between mb-4">
       <div>
         <h3 class="font-semibold">{{ budget.name }}</h3>
-        <p class="text-sm text-muted-foreground capitalize">{{ budget.period }}</p>
+        <p class="text-sm text-muted-foreground capitalize">{{ budget.period_type }}</p>
       </div>
       <div class="flex items-center gap-2">
         {% if budget.auto_renew %}
@@ -30,17 +30,17 @@
 
       <div class="relative h-2 w-full overflow-hidden rounded-full bg-secondary/20">
         <div
-          class="h-full transition-all progress-bar {% if percentage >= warning_threshold %}bg-yellow-500{% elif percentage >= 100 %}bg-destructive{% else %}bg-primary{% endif %}"
-          style="width: {{ percentage }}%"
+          class="h-full transition-all progress-bar {% if percentage >= 100 %}bg-destructive{% elif percentage >= warning_pct %}bg-yellow-500{% else %}bg-primary{% endif %}"
+          style="width: {{ [percentage, 100] | min }}%"
         ></div>
       </div>
 
       <p class="text-sm text-muted-foreground">
         {{ percentage }}% used
-        {% if percentage >= warning_threshold and percentage < 100 %}
-        <span class="text-yellow-600 dark:text-yellow-400"> - Warning threshold reached</span>
-        {% elif percentage >= 100 %}
+        {% if percentage >= 100 %}
         <span class="text-destructive"> - Budget exceeded</span>
+        {% elif percentage >= warning_pct %}
+        <span class="text-yellow-600 dark:text-yellow-400"> - Warning threshold reached</span>
         {% endif %}
       </p>
     </div>
