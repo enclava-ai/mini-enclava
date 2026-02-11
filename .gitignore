@@ -66,8 +66,6 @@ frontend/.next/
 frontend/node_modules/
 node_modules/
 
-# Compiled Tailwind CSS (generated from input.css)
-backend/app/static/css/tailwind.css
 venv/
 venv_memory_monitor/
 to_delete/
