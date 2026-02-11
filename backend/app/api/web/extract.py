@@ -120,7 +120,7 @@ async def process_document(
                 "request": request,
                 "user": user,
                 "csrf_token": get_csrf_token(request),
-                "result": result,
+                "result": result.model_dump(),  # Convert Pydantic model to dict for template
                 "success": True,
             },
         )
