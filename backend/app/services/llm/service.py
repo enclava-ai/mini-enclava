@@ -30,8 +30,10 @@ from ...core.config import settings
 
 from .resilience import ResilienceManagerFactory
 from ..usage_recording import UsageRecordingService
+from ..async_budget_enforcement import async_record_request_usage
 from .streaming_tracker import StreamingTokenTracker, StreamingUsageRecorder
 from ...models.chatbot import ChatbotInstance
+from ...models.api_key import APIKey
 
 # from .metrics import metrics_collector
 from .providers import BaseLLMProvider, PrivateModeProvider
@@ -332,6 +334,26 @@ class LLMService:
                 )
                 await db.commit()
 
+                # Record usage against budgets (if API key request)
+                if api_key_id:
+                    try:
+                        api_key_result = await db.execute(
+                            select(APIKey).where(APIKey.id == api_key_id)
+                        )
+                        api_key = api_key_result.scalar_one_or_none()
+                        if api_key:
+                            await async_record_request_usage(
+                                db,
+                                api_key,
+                                request.model,
+                                input_tokens,
+                                output_tokens,
+                                endpoint,
+                            )
+                    except Exception as budget_error:
+                        # Don't fail the request if budget recording fails
+                        logger.warning(f"Failed to record budget usage: {budget_error}")
+
             return response
 
         except Exception as e:
@@ -466,6 +488,25 @@ class LLMService:
                     is_streaming=True,
                 )
                 await db.commit()
+
+                # Record usage against budgets (if API key request)
+                if recorder.api_key_id:
+                    try:
+                        api_key_result = await db.execute(
+                            select(APIKey).where(APIKey.id == recorder.api_key_id)
+                        )
+                        api_key = api_key_result.scalar_one_or_none()
+                        if api_key:
+                            await async_record_request_usage(
+                                db,
+                                api_key,
+                                request.model,
+                                usage.input_tokens,
+                                usage.output_tokens,
+                                recorder.endpoint,
+                            )
+                    except Exception as budget_error:
+                        logger.warning(f"Failed to record budget usage: {budget_error}")
 
         except Exception as e:
             # Record streaming failure
