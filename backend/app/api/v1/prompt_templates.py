@@ -7,11 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-from sqlalchemy.dialects.postgresql import insert
 from datetime import datetime, timezone
 import uuid
 
 from app.db.database import get_db, utc_now
+from app.db.upsert import upsert
 from app.models.prompt_template import PromptTemplate, ChatbotPromptVariable
 from app.core.security import get_current_user
 from app.models.user import User
@@ -584,23 +584,22 @@ async def seed_default_templates(
                 else:
                     # Create new template, gracefully skipping if another request created it first
                     now = utc_now()
-                    stmt = (
-                        insert(PromptTemplate)
-                        .values(
-                            id=str(uuid.uuid4()),
-                            name=template_data["name"],
-                            type_key=type_key,
-                            description=template_data["description"],
-                            system_prompt=template_data["prompt"],
-                            is_default=True,
-                            is_active=True,
-                            version=1,
-                            created_at=now,
-                            updated_at=now,
-                        )
-                        .on_conflict_do_nothing(
-                            index_elements=[PromptTemplate.type_key]
-                        )
+                    stmt = upsert(
+                        PromptTemplate,
+                        values={
+                            "id": str(uuid.uuid4()),
+                            "name": template_data["name"],
+                            "type_key": type_key,
+                            "description": template_data["description"],
+                            "system_prompt": template_data["prompt"],
+                            "is_default": True,
+                            "is_active": True,
+                            "version": 1,
+                            "created_at": now,
+                            "updated_at": now,
+                        },
+                        index_elements=["type_key"],
+                        update_set=None  # Do nothing on conflict
                     )
 
                     result = await db.execute(stmt)
