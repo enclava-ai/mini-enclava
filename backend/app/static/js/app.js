@@ -276,6 +276,16 @@ function confirmAction(message, onConfirm) {
   }
 }
 
+// Edit template placeholder - templates are typically not editable via UI
+function editTemplate(templateId) {
+  showToast('Template editing is not available in this version', 'info');
+}
+
+// Edit budget - opens budget in edit mode
+function editBudget(budgetId) {
+  showToast('Budget editing is not available in this version', 'info');
+}
+
 // Initialize theme from localStorage or system preference
 function initTheme() {
   var stored = localStorage.getItem('theme');

@@ -354,3 +354,145 @@ async def async_record_request_usage(
     return await service.record_usage(
         api_key, model_name, input_tokens, output_tokens, endpoint
     )
+
+
+# User-level budget enforcement (for web UI / JWT auth requests)
+
+
+async def async_check_user_budget_for_request(
+    db: AsyncSession,
+    user_id: int,
+    model_name: str,
+    estimated_tokens: int,
+    endpoint: str = None,
+) -> Tuple[bool, Optional[str], List[Dict[str, Any]]]:
+    """Check budget compliance for a user (not API key) request"""
+    try:
+        estimated_cost = estimate_request_cost(model_name, estimated_tokens)
+
+        # Get user-level budgets (where api_key_id is NULL)
+        stmt = select(Budget).where(
+            and_(
+                Budget.is_active == True,
+                Budget.user_id == user_id,
+                Budget.api_key_id.is_(None),
+            )
+        )
+        result = await db.execute(stmt)
+        budgets = result.scalars().all()
+
+        warnings = []
+
+        for budget in budgets:
+            if not budget.is_in_period():
+                if budget.auto_renew:
+                    budget.reset_period()
+                    await db.commit()
+                continue
+
+            # Check model/endpoint restrictions
+            if model_name and budget.allowed_models:
+                if model_name not in budget.allowed_models:
+                    continue
+            if endpoint and budget.allowed_endpoints:
+                if endpoint not in budget.allowed_endpoints:
+                    continue
+
+            # Check if budget already exceeded
+            if budget.is_exceeded and budget.enforce_hard_limit:
+                return (
+                    False,
+                    f"Budget '{budget.name}' exceeded. "
+                    f"Limit: ${budget.limit_cents/100:.2f}, "
+                    f"Current usage: ${budget.current_usage_cents/100:.2f}",
+                    warnings,
+                )
+
+            # Check if this request would exceed budget
+            if budget.current_usage_cents + estimated_cost > budget.limit_cents:
+                if budget.enforce_hard_limit:
+                    return (
+                        False,
+                        f"Request would exceed budget '{budget.name}'. "
+                        f"Limit: ${budget.limit_cents/100:.2f}, "
+                        f"Current: ${budget.current_usage_cents/100:.2f}, "
+                        f"Estimated: ${estimated_cost/100:.2f}",
+                        warnings,
+                    )
+
+            # Check warning threshold
+            if (
+                budget.warning_threshold_cents
+                and budget.current_usage_cents >= budget.warning_threshold_cents
+                and not budget.is_warning_sent
+            ):
+                warnings.append({
+                    "budget_id": budget.id,
+                    "budget_name": budget.name,
+                    "message": f"Budget '{budget.name}' warning threshold reached",
+                    "current_usage_cents": budget.current_usage_cents,
+                    "limit_cents": budget.limit_cents,
+                })
+
+        return (True, None, warnings)
+
+    except Exception as e:
+        logger.error(f"Error checking user budget: {e}")
+        return (True, None, [])  # Fail open
+
+
+async def async_record_user_request_usage(
+    db: AsyncSession,
+    user_id: int,
+    model_name: str,
+    input_tokens: int,
+    output_tokens: int,
+    endpoint: str = None,
+) -> List[Budget]:
+    """Record usage against user-level budgets (not API key)"""
+    try:
+        actual_cost = CostCalculator.calculate_cost_cents(
+            model_name, input_tokens, output_tokens
+        )
+
+        # Get user-level budgets
+        stmt = select(Budget).where(
+            and_(
+                Budget.is_active == True,
+                Budget.user_id == user_id,
+                Budget.api_key_id.is_(None),
+            )
+        )
+        result = await db.execute(stmt)
+        budgets = result.scalars().all()
+
+        updated_budgets = []
+
+        for budget in budgets:
+            if not budget.is_in_period():
+                continue
+
+            # Check model/endpoint restrictions
+            if model_name and budget.allowed_models:
+                if model_name not in budget.allowed_models:
+                    continue
+            if endpoint and budget.allowed_endpoints:
+                if endpoint not in budget.allowed_endpoints:
+                    continue
+
+            # Add usage to budget
+            budget.add_usage(actual_cost)
+            updated_budgets.append(budget)
+
+            logger.debug(
+                f"Recorded user usage for budget {budget.id}: "
+                f"${actual_cost/100:.4f} (total: ${budget.current_usage_cents/100:.2f})"
+            )
+
+        await db.commit()
+        return updated_budgets
+
+    except Exception as e:
+        logger.error(f"Error recording user budget usage: {e}")
+        await db.rollback()
+        return []

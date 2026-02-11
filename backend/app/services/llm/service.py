@@ -30,7 +30,10 @@ from ...core.config import settings
 
 from .resilience import ResilienceManagerFactory
 from ..usage_recording import UsageRecordingService
-from ..async_budget_enforcement import async_record_request_usage
+from ..async_budget_enforcement import (
+    async_record_request_usage,
+    async_record_user_request_usage,
+)
 from .streaming_tracker import StreamingTokenTracker, StreamingUsageRecorder
 from ...models.chatbot import ChatbotInstance
 from ...models.api_key import APIKey
@@ -334,9 +337,10 @@ class LLMService:
                 )
                 await db.commit()
 
-                # Record usage against budgets (if API key request)
-                if api_key_id:
-                    try:
+                # Record usage against budgets
+                try:
+                    if api_key_id:
+                        # API key request - record against API key budgets
                         api_key_result = await db.execute(
                             select(APIKey).where(APIKey.id == api_key_id)
                         )
@@ -350,9 +354,19 @@ class LLMService:
                                 output_tokens,
                                 endpoint,
                             )
-                    except Exception as budget_error:
-                        # Don't fail the request if budget recording fails
-                        logger.warning(f"Failed to record budget usage: {budget_error}")
+                    elif user_id:
+                        # Web UI request - record against user budgets
+                        await async_record_user_request_usage(
+                            db,
+                            user_id,
+                            request.model,
+                            input_tokens,
+                            output_tokens,
+                            endpoint,
+                        )
+                except Exception as budget_error:
+                    # Don't fail the request if budget recording fails
+                    logger.warning(f"Failed to record budget usage: {budget_error}")
 
             return response
 
@@ -489,9 +503,10 @@ class LLMService:
                 )
                 await db.commit()
 
-                # Record usage against budgets (if API key request)
-                if recorder.api_key_id:
-                    try:
+                # Record usage against budgets
+                try:
+                    if recorder.api_key_id:
+                        # API key request
                         api_key_result = await db.execute(
                             select(APIKey).where(APIKey.id == recorder.api_key_id)
                         )
@@ -505,8 +520,18 @@ class LLMService:
                                 usage.output_tokens,
                                 recorder.endpoint,
                             )
-                    except Exception as budget_error:
-                        logger.warning(f"Failed to record budget usage: {budget_error}")
+                    elif recorder.user_id:
+                        # Web UI request
+                        await async_record_user_request_usage(
+                            db,
+                            recorder.user_id,
+                            request.model,
+                            usage.input_tokens,
+                            usage.output_tokens,
+                            recorder.endpoint,
+                        )
+                except Exception as budget_error:
+                    logger.warning(f"Failed to record budget usage: {budget_error}")
 
         except Exception as e:
             # Record streaming failure
