@@ -63,6 +63,7 @@ STATIC_PRICING: Dict[str, Dict[str, Dict[str, int]]] = {
         # These are fallback prices if API sync fails
         "phala/deepseek-chat-v3-0324": {"input": 14, "output": 28},
         "phala/deepseek-r1-0528": {"input": 55, "output": 219},
+        "phala/gemma-3-27b-it": {"input": 20, "output": 40},  # Gemma 3 27B - estimated
         "meta-llama/llama-3.1-405b-instruct": {"input": 300, "output": 300},
         "meta-llama/llama-3.1-70b-instruct": {"input": 52, "output": 75},
         "anthropic/claude-3.5-sonnet": {"input": 300, "output": 1500},

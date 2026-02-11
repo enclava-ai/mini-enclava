@@ -17,12 +17,87 @@ from sqlalchemy import and_, or_, select, update
 
 from app.models.budget import Budget
 from app.models.api_key import APIKey
-from app.services.cost_calculator import CostCalculator, estimate_request_cost
+from app.services.pricing import PricingService
 from app.services.metrics import get_metrics_service
 from app.services.alerts import get_alert_service
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _extract_provider_from_model(model_name: str) -> Tuple[str, str]:
+    """
+    Extract provider_id and clean model name from a model string.
+
+    Examples:
+        "phala/gemma-3-27b-it" -> ("redpill", "phala/gemma-3-27b-it")
+        "meta-llama/llama-3.1-70b-instruct" -> ("privatemode", "meta-llama/llama-3.1-70b-instruct")
+        "gpt-4" -> ("openai", "gpt-4")
+
+    Returns:
+        Tuple of (provider_id, model_name)
+    """
+    model_lower = model_name.lower()
+
+    # Check for known provider prefixes
+    if model_lower.startswith("phala/"):
+        return "redpill", model_name
+    elif model_lower.startswith("openai/"):
+        return "openai", model_name
+    elif model_lower.startswith("anthropic/"):
+        return "anthropic", model_name
+    elif model_lower.startswith("google/") or model_lower.startswith("gemini/"):
+        return "google", model_name
+
+    # Infer provider from model name patterns
+    if "gpt-" in model_lower or model_lower.startswith("o1"):
+        return "openai", model_name
+    elif "claude" in model_lower:
+        return "anthropic", model_name
+    elif "gemini" in model_lower:
+        return "google", model_name
+    elif "deepseek" in model_lower:
+        return "redpill", model_name
+    elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower or "qwen" in model_lower:
+        return "privatemode", model_name
+
+    # Default to privatemode
+    return "privatemode", model_name
+
+
+def _calculate_cost_cents(
+    model_name: str,
+    input_tokens: int,
+    output_tokens: int,
+    db: Optional[AsyncSession] = None,
+) -> int:
+    """
+    Calculate cost in actual cents using PricingService.
+
+    This replaces the old CostCalculator which had unit confusion
+    (returned 1/10000ths of a dollar but called them cents).
+    """
+    provider_id, clean_model = _extract_provider_from_model(model_name)
+
+    # Use PricingService for accurate cents calculation
+    pricing_service = PricingService(db)
+    pricing = pricing_service.get_pricing_static(provider_id, clean_model)
+
+    _, _, total_cost_cents = pricing_service.calculate_cost_cents(
+        input_tokens, output_tokens, pricing
+    )
+
+    return total_cost_cents
+
+
+def _estimate_cost_cents(model_name: str, estimated_tokens: int) -> int:
+    """
+    Estimate cost in cents for a request based on estimated total tokens.
+    Assumes 70% input, 30% output token distribution.
+    """
+    input_tokens = int(estimated_tokens * 0.7)
+    output_tokens = int(estimated_tokens * 0.3)
+    return _calculate_cost_cents(model_name, input_tokens, output_tokens)
 
 
 class AsyncBudgetEnforcementError(Exception):
@@ -72,8 +147,8 @@ class AsyncBudgetEnforcementService:
             Tuple of (is_allowed, error_message, warnings)
         """
         try:
-            # Calculate estimated cost
-            estimated_cost = estimate_request_cost(model_name, estimated_tokens)
+            # Calculate estimated cost in actual cents
+            estimated_cost = _estimate_cost_cents(model_name, estimated_tokens)
 
             # Get applicable budgets
             budgets = await self._get_applicable_budgets(api_key, model_name, endpoint)
@@ -168,9 +243,9 @@ class AsyncBudgetEnforcementService:
             List of budgets that were updated
         """
         try:
-            # Calculate actual cost
-            actual_cost = CostCalculator.calculate_cost_cents(
-                model_name, input_tokens, output_tokens
+            # Calculate actual cost in cents using PricingService
+            actual_cost = _calculate_cost_cents(
+                model_name, input_tokens, output_tokens, self.db
             )
 
             # Get applicable budgets
@@ -368,7 +443,8 @@ async def async_check_user_budget_for_request(
 ) -> Tuple[bool, Optional[str], List[Dict[str, Any]]]:
     """Check budget compliance for a user (not API key) request"""
     try:
-        estimated_cost = estimate_request_cost(model_name, estimated_tokens)
+        # Calculate estimated cost in actual cents
+        estimated_cost = _estimate_cost_cents(model_name, estimated_tokens)
 
         # Get user-level budgets (where api_key_id is NULL)
         stmt = select(Budget).where(
@@ -451,8 +527,9 @@ async def async_record_user_request_usage(
 ) -> List[Budget]:
     """Record usage against user-level budgets (not API key)"""
     try:
-        actual_cost = CostCalculator.calculate_cost_cents(
-            model_name, input_tokens, output_tokens
+        # Calculate actual cost in cents using PricingService
+        actual_cost = _calculate_cost_cents(
+            model_name, input_tokens, output_tokens, db
         )
 
         # Get user-level budgets
