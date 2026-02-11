@@ -161,9 +161,18 @@
   {% endif %}
 </div>
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    initFileUpload('{{ name }}-dropzone', '{{ name }}', '{{ name }}-preview');
-  });
+  // Initialize immediately if DOM is ready, otherwise wait
+  (function() {
+    function init() {
+      initFileUpload('{{ name }}-dropzone', '{{ name }}', '{{ name }}-preview');
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      // DOM already loaded (HTMX partial load)
+      init();
+    }
+  })();
 </script>
 {% endmacro %}
 
