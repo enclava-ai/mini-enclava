@@ -437,7 +437,7 @@ async def create_default_admin():
     from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 
     try:
-        admin_email = settings.ADMIN_EMAIL
+        admin_email = settings.ADMIN_EMAIL.lower() if settings.ADMIN_EMAIL else None
         admin_password = settings.ADMIN_PASSWORD
 
         if not admin_email or not admin_password:

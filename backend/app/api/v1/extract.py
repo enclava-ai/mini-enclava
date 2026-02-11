@@ -17,11 +17,11 @@ from fastapi import (
 )
 from pydantic import ValidationError
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user, get_extract_auth_context
 from app.db.database import get_db
+from app.db.upsert import upsert
 from app.models.api_key import APIKey
 from app.models.extract_settings import ExtractSettings
 from app.models.user import User
@@ -469,12 +469,11 @@ async def get_settings(
             first_model = vision_models[0].id
 
             # Use upsert to avoid race conditions under concurrent load
-            upsert_stmt = pg_insert(ExtractSettings).values(
-                id=1,
-                default_model=first_model
-            ).on_conflict_do_update(
-                index_elements=['id'],
-                set_={'default_model': first_model}
+            upsert_stmt = upsert(
+                ExtractSettings,
+                values={"id": 1, "default_model": first_model},
+                index_elements=["id"],
+                update_set={"default_model": first_model}
             )
             await db.execute(upsert_stmt)
             await db.commit()

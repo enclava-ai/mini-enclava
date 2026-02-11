@@ -90,21 +90,28 @@ async def process_document(
     if not verify_csrf_token(request, csrf_token):
         raise HTTPException(status_code=403, detail="Invalid CSRF token")
 
-    # Import extract service
-    from app.services.extract_service import extract_service
+    # Import extract service from modular location
+    from app.modules.extract.services.extract_service import ExtractService
 
-    # Read file content
-    content = await file.read()
+    extract_service = ExtractService()
 
     try:
+        # Convert user to dict format expected by service
+        current_user = {
+            "id": str(user.id),
+            "email": user.email,
+            "is_superuser": user.is_superuser,
+        }
+
         # Process the document
         result = await extract_service.process_document(
             db=db,
-            user_id=user.id,
+            file=file,
             template_id=template_id,
-            file_content=content,
-            file_name=file.filename,
-            content_type=file.content_type,
+            context=None,
+            current_user=current_user,
+            api_key=None,
+            config=None,
         )
 
         return templates.TemplateResponse(
