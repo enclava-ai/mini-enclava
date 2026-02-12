@@ -4,8 +4,8 @@
   {% for template in templates %}
   <div class="rounded-lg border bg-card p-4">
     <div class="flex items-start justify-between">
-      <div>
-        <h3 class="font-medium">{{ template.name }}</h3>
+      <div class="flex-1 min-w-0 mr-2">
+        <h3 class="font-medium truncate">{{ template.id | replace('_', ' ') | title }}</h3>
         {% if template.description %}
         <p class="text-sm text-muted-foreground mt-1">{{ template.description | truncate(50) }}</p>
         {% endif %}

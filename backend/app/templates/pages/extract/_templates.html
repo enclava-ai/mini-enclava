@@ -17,8 +17,8 @@
     {% for template in templates %}
     <div class="rounded-lg border bg-card p-4">
       <div class="flex items-start justify-between">
-        <div>
-          <h3 class="font-medium">{{ template.name }}</h3>
+        <div class="flex-1 min-w-0 mr-2">
+          <h3 class="font-medium truncate">{{ template.id | replace('_', ' ') | title }}</h3>
           {% if template.description %}
           <p class="text-sm text-muted-foreground mt-1">{{ template.description | truncate(50) }}</p>
           {% endif %}
@@ -84,14 +84,27 @@
     </div>
 
     <div class="p-6 space-y-4">
-      {{ input(name='name', label='Template Name', placeholder='e.g., Invoice Extraction', required=true) }}
+      {{ input(name='template_id', label='Template ID', placeholder='e.g., invoice_extraction', required=true) }}
       {{ textarea(name='description', label='Description', placeholder='What does this template extract?', rows=2) }}
       {{ textarea(
-        name='schema_json',
-        label='Schema (JSON)',
-        placeholder='{"invoice_number": "string", "total_amount": "number", ...}',
-        rows=6,
+        name='system_prompt',
+        label='System Prompt',
+        placeholder='You are a document extraction assistant. Extract the following fields from the document...',
+        rows=3,
         required=true
+      ) }}
+      {{ textarea(
+        name='user_prompt',
+        label='User Prompt',
+        placeholder='Extract the data from this document and return it as JSON.',
+        rows=3,
+        required=true
+      ) }}
+      {{ textarea(
+        name='output_schema',
+        label='Output Schema (JSON, optional)',
+        placeholder='{"invoice_number": "string", "total_amount": "number", ...}',
+        rows=4
       ) }}
     </div>
 
