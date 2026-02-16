@@ -37,28 +37,28 @@ WORKDIR /app
 
 # Install system dependencies
 ARG INSTALL_PG_DEPS="true"
+ARG INSTALL_BUILD_DEPS="true"
+ARG INSTALL_PDF_DEPS="true"
+ARG REQUIREMENTS_FILE="backend/requirements.txt"
 RUN apt-get update && \
     if [ "$INSTALL_PG_DEPS" = "true" ]; then \
         apt-get install -y --no-install-recommends \
-            build-essential \
+            $([ "$INSTALL_BUILD_DEPS" = "true" ] && echo "build-essential") \
             libpq-dev \
             postgresql-client \
-            curl \
-            ffmpeg \
-            poppler-utils ; \
+            $([ "$INSTALL_PDF_DEPS" = "true" ] && echo "poppler-utils") ; \
     else \
         apt-get install -y --no-install-recommends \
-            build-essential \
-            curl \
-            ffmpeg \
-            poppler-utils ; \
+            $([ "$INSTALL_BUILD_DEPS" = "true" ] && echo "build-essential") \
+            $([ "$INSTALL_PDF_DEPS" = "true" ] && echo "poppler-utils") ; \
     fi && \
     rm -rf /var/lib/apt/lists/*
 
 # Optional CPU-only PyTorch install for ML-dependent features (disabled by default in sqlite/extract-only flows)
 ARG INSTALL_TORCH="true"
 ARG TORCH_VERSION="2.6.0"
-RUN if [ "$INSTALL_TORCH" = "true" ]; then \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$INSTALL_TORCH" = "true" ]; then \
     pip install --no-cache-dir \
         torch==${TORCH_VERSION}+cpu \
         --index-url https://download.pytorch.org/whl/cpu \
@@ -68,7 +68,7 @@ else \
 fi
 
 # Copy requirements and install Python dependencies
-COPY backend/requirements.txt .
+COPY ${REQUIREMENTS_FILE} ./requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r requirements.txt
 
@@ -93,7 +93,7 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD ["python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status == 200 else 1)"]
 
 # Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

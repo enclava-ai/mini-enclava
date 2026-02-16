@@ -1,0 +1,26 @@
+.git
+.venv
+venv
+env
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+.cache
+__pycache__
+*.py[cod]
+*.so
+*.swp
+*.swo
+*.log
+*.tmp
+
+# Keep only runtime-required files:
+# Exclude tests and local tooling artifacts to reduce build context.
+tests
+tmp
+htmlcov
+build
+dist
+coverage
+

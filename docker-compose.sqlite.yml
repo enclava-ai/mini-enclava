@@ -20,7 +20,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       args:
+        REQUIREMENTS_FILE: requirements.sqlite.txt
         INSTALL_TORCH: "false"
+        INSTALL_BUILD_DEPS: "false"
         INSTALL_PG_DEPS: "false"
     environment:
       # SQLite database

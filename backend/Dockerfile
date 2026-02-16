@@ -29,7 +29,7 @@ RUN set -eux; \
         -o Dir::State::Lists="$apt_lists" \
         -o Dir::Cache::Archives="$apt_cache" \
         update; \
-    DEBIAN_FRONTEND=noninteractive apt-get \
+        DEBIAN_FRONTEND=noninteractive apt-get \
         -o Acquire::ForceIPv4=true \
         -o Dir::State::Lists="$apt_lists" \
         -o Dir::Cache::Archives="$apt_cache" \
@@ -55,7 +55,7 @@ else \
 fi
 
 # Copy requirements and install Python dependencies
-COPY ${REQUIREMENTS_FILE} .
+COPY ${REQUIREMENTS_FILE} ./requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r requirements.txt
 

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: enclave-volume-init
+  IMAGE_NAME: mini-enclava
   REGISTRY: ghcr.io
 
 jobs:
@@ -53,6 +53,8 @@ jobs:
           build-args: |
             INSTALL_TORCH=false
             INSTALL_PG_DEPS=false
+            INSTALL_BUILD_DEPS=false
+            REQUIREMENTS_FILE=backend/requirements.sqlite.txt
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

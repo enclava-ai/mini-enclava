@@ -147,6 +147,12 @@ class ModuleManager:
         """Load module configurations from dynamic discovery"""
         # Initialize permission system
         permission_registry.register_platform_permissions()
+        feature_flags = {
+            "rag": settings.RAG_ENABLED,
+            "chatbot": settings.CHATBOTS_ENABLED,
+            "agent": settings.AGENTS_ENABLED,
+            "extract": settings.EXTRACT_ENABLED,
+        }
         self.module_configs = {}
 
         # Discover modules dynamically from filesystem
@@ -174,11 +180,18 @@ class ModuleManager:
                     )
                     continue
 
+                module_enabled = manifest.enabled
+                if name in feature_flags and not feature_flags[name]:
+                    logger.info(
+                        f"Disabling module '{name}' due to feature flag"
+                    )
+                    module_enabled = False
+
                 saved_config = module_config_manager.get_module_config(name)
 
                 module_config = ModuleConfig(
                     name=manifest.name,
-                    enabled=manifest.enabled,
+                    enabled=module_enabled,
                     config=saved_config,
                     dependencies=manifest.dependencies,
                 )
@@ -191,7 +204,7 @@ class ModuleManager:
                     {
                         "version": manifest.version,
                         "description": manifest.description,
-                        "enabled": manifest.enabled,
+                        "enabled": module_enabled,
                         "dependencies": manifest.dependencies,
                     },
                 )
@@ -213,7 +226,9 @@ class ModuleManager:
         """Fallback to legacy hard-coded module loading"""
         logger.warning("Falling back to legacy module configuration")
 
-        default_modules = [ModuleConfig(name="rag", enabled=True, config={})]
+        default_modules = []
+        if settings.RAG_ENABLED:
+            default_modules.append(ModuleConfig(name="rag", enabled=True, config={}))
 
         for config in default_modules:
             self.module_configs[config.name] = config

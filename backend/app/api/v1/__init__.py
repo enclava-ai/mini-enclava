@@ -3,6 +3,7 @@ API v1 package
 """
 
 from fastapi import APIRouter
+from app.core.config import settings
 from .auth import router as auth_router
 from .llm import router as llm_router
 from .modules import router as modules_router
@@ -10,17 +11,29 @@ from .platform import router as platform_router
 from .users import router as users_router
 from .api_keys import router as api_keys_router
 from .budgets import router as budgets_router
-from .audit import router as audit_router
 from .settings import router as settings_router
-from .analytics import router as analytics_router
-from .rag import router as rag_router
-from .chatbot import router as chatbot_router
 from .prompt_templates import router as prompt_templates_router
-from .plugin_registry import router as plugin_registry_router
 from .endpoints.tools import router as tools_router
 from .endpoints.tool_calling import router as tool_calling_router
 from .endpoints.user_management import router as user_management_router
-from .extract import router as extract_router
+
+if settings.AUDIT_ENABLED:
+    from .audit import router as audit_router
+
+if settings.ANALYTICS_ENABLED:
+    from .analytics import router as analytics_router
+
+if settings.RAG_ENABLED:
+    from .rag import router as rag_router
+
+if settings.CHATBOTS_ENABLED:
+    from .chatbot import router as chatbot_router
+
+if settings.EXTRACT_ENABLED:
+    from .extract import router as extract_router
+
+if settings.PLUGINS_ENABLED:
+    from .plugin_registry import router as plugin_registry_router
 
 # Create main API router
 api_router = APIRouter()
@@ -46,23 +59,24 @@ api_router.include_router(api_keys_router, prefix="/api-keys", tags=["api-keys"]
 # Include budget management routes
 api_router.include_router(budgets_router, prefix="/budgets", tags=["budgets"])
 
-# Include audit log routes
-api_router.include_router(audit_router, prefix="/audit", tags=["audit"])
-
 # Include settings management routes
 api_router.include_router(settings_router, prefix="/settings", tags=["settings"])
 
-# Include analytics routes
-api_router.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
+if settings.ANALYTICS_ENABLED:
+    # Include analytics routes
+    api_router.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 
-# Include RAG routes
-api_router.include_router(rag_router, prefix="/rag", tags=["rag"])
+if settings.RAG_ENABLED:
+    # Include RAG routes
+    api_router.include_router(rag_router, prefix="/rag", tags=["rag"])
 
-# Include chatbot routes
-api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
+if settings.CHATBOTS_ENABLED:
+    # Include chatbot routes
+    api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 
-# Include extract routes
-api_router.include_router(extract_router, prefix="/extract", tags=["extract"])
+if settings.EXTRACT_ENABLED:
+    # Include extract routes
+    api_router.include_router(extract_router, prefix="/extract", tags=["extract"])
 
 # Include prompt template routes
 api_router.include_router(
@@ -71,15 +85,23 @@ api_router.include_router(
 
 
 # Include plugin registry routes
-api_router.include_router(plugin_registry_router, prefix="/plugins", tags=["plugins"])
+if settings.PLUGINS_ENABLED:
+    # Include plugin registry routes
+    api_router.include_router(
+        plugin_registry_router, prefix="/plugins", tags=["plugins"]
+    )
+
+if settings.BUILTIN_TOOLS_ENABLED:
+    # Include built-in tool management routes
+    api_router.include_router(tools_router, prefix="/tools", tags=["tools"])
+    api_router.include_router(
+        tool_calling_router, prefix="/tool-calling", tags=["tool-calling"]
+    )
 
 # Include tool management routes
-api_router.include_router(tools_router, prefix="/tools", tags=["tools"])
-
-# Include tool calling routes
-api_router.include_router(
-    tool_calling_router, prefix="/tool-calling", tags=["tool-calling"]
-)
+if settings.AUDIT_ENABLED:
+    # Include audit log routes
+    api_router.include_router(audit_router, prefix="/audit", tags=["audit"])
 
 # Include admin user management routes
 api_router.include_router(
