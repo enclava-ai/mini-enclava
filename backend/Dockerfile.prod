@@ -50,6 +50,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # COPY requirements-nlp.txt .
 # RUN pip install --no-cache-dir -r requirements-nlp.txt
 
+# Optional: Install PyTorch dependencies if needed for ML features
+ARG INSTALL_TORCH="false"
+ARG TORCH_VERSION="2.6.0"
+RUN if [ "$INSTALL_TORCH" = "true" ]; then \
+    pip install --no-cache-dir \
+        torch==${TORCH_VERSION}+cpu \
+        --index-url https://download.pytorch.org/whl/cpu \
+        -f https://download.pytorch.org/whl/torch_stable.html ; \
+else \
+    echo "Skipping PyTorch installation (INSTALL_TORCH=$INSTALL_TORCH)"; \
+fi
+
 # Copy application code
 COPY . .
 

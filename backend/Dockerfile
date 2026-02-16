@@ -41,13 +41,20 @@ RUN set -eux; \
     rm -rf "$apt_lists" "$apt_cache"
 
 # Install CPU-only PyTorch and compatible numpy first (faster download)
-RUN pip install --no-cache-dir torch==2.5.1+cpu torchaudio==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu -f https://download.pytorch.org/whl/torch_stable.html
+ARG INSTALL_TORCH="true"
+ARG TORCH_VERSION="2.6.0"
+RUN if [ "$INSTALL_TORCH" = "true" ]; then \
+    pip install --no-cache-dir \
+        torch==${TORCH_VERSION}+cpu \
+        --index-url https://download.pytorch.org/whl/cpu \
+        -f https://download.pytorch.org/whl/torch_stable.html ; \
+else \
+    echo "Skipping PyTorch installation (INSTALL_TORCH=$INSTALL_TORCH)"; \
+fi
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-COPY tests/requirements-test.txt ./tests/
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r tests/requirements-test.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Optional: Download spaCy English model for NLP processing (commented out for faster builds)
 # Uncomment if you install requirements-nlp.txt and need entity extraction
