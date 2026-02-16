@@ -56,12 +56,19 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copy application code
 COPY . .
 
+# Copy and make startup script executable
+COPY scripts/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
 # Copy and make migration script executable
 COPY scripts/migrate.sh /usr/local/bin/migrate.sh
 RUN chmod +x /usr/local/bin/migrate.sh
 
 # Create logs directory
 RUN mkdir -p logs
+
+# Default uvicorn options for this image
+ENV UVICORN_ARGS="--host 0.0.0.0 --port 8000 --reload"
 
 # Expose port
 EXPOSE 8000
@@ -71,4 +78,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["/usr/local/bin/start.sh"]

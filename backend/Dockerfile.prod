@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
 ENV NODE_ENV=production
 ENV APP_ENV=production
+ENV UVICORN_ARGS="--host 0.0.0.0 --port 8000"
 
 # Set work directory
 WORKDIR /app
@@ -56,6 +57,10 @@ COPY . .
 COPY scripts/migrate.sh /usr/local/bin/migrate.sh
 RUN chmod +x /usr/local/bin/migrate.sh
 
+# Copy and make startup script executable
+COPY scripts/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app && \
     chown -R app:app /app
@@ -72,4 +77,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application in production mode
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/usr/local/bin/start.sh"]

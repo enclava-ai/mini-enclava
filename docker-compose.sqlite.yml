@@ -13,30 +13,7 @@
 #   - ADMIN_EMAIL, ADMIN_PASSWORD (for initial admin user)
 
 services:
-  # Database migration service - runs once to apply migrations
-  enclava-migrate:
-    container_name: enclava-migrate
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      - DATABASE_URL=sqlite:////app/data/enclava.db
-      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
-      - BASE_URL=${BASE_URL:-localhost}
-      - PLUGINS_ENABLED=false
-    command: ["/usr/local/bin/migrate.sh"]
-    volumes:
-      - ./backend:/app:z
-      - enclava-sqlite-data:/app/data:z
-    networks:
-      - enclava-net
-    restart: "no"
-    security_opt:
-      - label=disable
-
-  # Main application backend
+  # Main application backend (runs migrations at startup, then launches API)
   enclava-backend:
     container_name: enclava-backend
     build:
@@ -71,9 +48,6 @@ services:
       - PROMETHEUS_ENABLED=false
       # Logging
       - LOG_LLM_PROMPTS=${LOG_LLM_PROMPTS:-false}
-    depends_on:
-      enclava-migrate:
-        condition: service_completed_successfully
     ports:
       - "8000:8000"  # Direct backend access (no nginx)
     volumes:
