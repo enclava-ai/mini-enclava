@@ -3,7 +3,7 @@ API v1 package
 """
 
 from fastapi import APIRouter
-from app.core.config import settings
+from app.core.config import settings as app_settings
 from .auth import router as auth_router
 from .llm import router as llm_router
 from .modules import router as modules_router
@@ -17,22 +17,22 @@ from .endpoints.tools import router as tools_router
 from .endpoints.tool_calling import router as tool_calling_router
 from .endpoints.user_management import router as user_management_router
 
-if settings.AUDIT_ENABLED:
+if app_settings.AUDIT_ENABLED:
     from .audit import router as audit_router
 
-if settings.ANALYTICS_ENABLED:
+if app_settings.ANALYTICS_ENABLED:
     from .analytics import router as analytics_router
 
-if settings.RAG_ENABLED:
+if app_settings.RAG_ENABLED:
     from .rag import router as rag_router
 
-if settings.CHATBOTS_ENABLED:
+if app_settings.CHATBOTS_ENABLED:
     from .chatbot import router as chatbot_router
 
-if settings.EXTRACT_ENABLED:
+if app_settings.EXTRACT_ENABLED:
     from .extract import router as extract_router
 
-if settings.PLUGINS_ENABLED:
+if app_settings.PLUGINS_ENABLED:
     from .plugin_registry import router as plugin_registry_router
 
 # Create main API router
@@ -62,19 +62,19 @@ api_router.include_router(budgets_router, prefix="/budgets", tags=["budgets"])
 # Include settings management routes
 api_router.include_router(settings_router, prefix="/settings", tags=["settings"])
 
-if settings.ANALYTICS_ENABLED:
+if app_settings.ANALYTICS_ENABLED:
     # Include analytics routes
     api_router.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 
-if settings.RAG_ENABLED:
+if app_settings.RAG_ENABLED:
     # Include RAG routes
     api_router.include_router(rag_router, prefix="/rag", tags=["rag"])
 
-if settings.CHATBOTS_ENABLED:
+if app_settings.CHATBOTS_ENABLED:
     # Include chatbot routes
     api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 
-if settings.EXTRACT_ENABLED:
+if app_settings.EXTRACT_ENABLED:
     # Include extract routes
     api_router.include_router(extract_router, prefix="/extract", tags=["extract"])
 
@@ -85,13 +85,13 @@ api_router.include_router(
 
 
 # Include plugin registry routes
-if settings.PLUGINS_ENABLED:
+if app_settings.PLUGINS_ENABLED:
     # Include plugin registry routes
     api_router.include_router(
         plugin_registry_router, prefix="/plugins", tags=["plugins"]
     )
 
-if settings.BUILTIN_TOOLS_ENABLED:
+if app_settings.BUILTIN_TOOLS_ENABLED:
     # Include built-in tool management routes
     api_router.include_router(tools_router, prefix="/tools", tags=["tools"])
     api_router.include_router(
@@ -99,7 +99,7 @@ if settings.BUILTIN_TOOLS_ENABLED:
     )
 
 # Include tool management routes
-if settings.AUDIT_ENABLED:
+if app_settings.AUDIT_ENABLED:
     # Include audit log routes
     api_router.include_router(audit_router, prefix="/audit", tags=["audit"])
 

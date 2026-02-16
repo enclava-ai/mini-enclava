@@ -3,7 +3,7 @@ Internal API v1 package - for frontend use only
 """
 
 from fastapi import APIRouter
-from app.core.config import settings
+from app.core.config import settings as app_settings
 from ..v1.auth import router as auth_router
 from ..v1.modules import router as modules_router
 from ..v1.users import router as users_router
@@ -22,23 +22,23 @@ from .usage_stats import router as usage_stats_router
 from .metrics import router as metrics_router
 from .providers import router as providers_router
 
-if settings.AUDIT_ENABLED:
+if app_settings.AUDIT_ENABLED:
     from ..v1.audit import router as audit_router
 
-if settings.ANALYTICS_ENABLED:
+if app_settings.ANALYTICS_ENABLED:
     from ..v1.analytics import router as analytics_router
 
-if settings.RAG_ENABLED:
+if app_settings.RAG_ENABLED:
     from ..v1.rag import router as rag_router
     from ..rag_debug import router as rag_debug_router
 
-if settings.CHATBOTS_ENABLED:
+if app_settings.CHATBOTS_ENABLED:
     from ..v1.chatbot import router as chatbot_router
 
-if settings.EXTRACT_ENABLED:
+if app_settings.EXTRACT_ENABLED:
     from ..v1.extract import router as extract_router
 
-if settings.PLUGINS_ENABLED:
+if app_settings.PLUGINS_ENABLED:
     from ..v1.plugin_registry import router as plugin_registry_router
 
 # Create internal API router
@@ -73,7 +73,7 @@ internal_api_router.include_router(
 )
 
 # Include audit log routes (frontend audit viewing)
-if settings.AUDIT_ENABLED:
+if app_settings.AUDIT_ENABLED:
     internal_api_router.include_router(
         audit_router, prefix="/audit", tags=["internal-audit"]
     )
@@ -84,13 +84,13 @@ internal_api_router.include_router(
 )
 
 # Include analytics routes (frontend analytics viewing)
-if settings.ANALYTICS_ENABLED:
+if app_settings.ANALYTICS_ENABLED:
     internal_api_router.include_router(
         analytics_router, prefix="/analytics", tags=["internal-analytics"]
     )
 
 # Include RAG routes (frontend RAG document management)
-if settings.RAG_ENABLED:
+if app_settings.RAG_ENABLED:
     internal_api_router.include_router(rag_router, prefix="/rag", tags=["internal-rag"])
 
     # Include RAG debug routes (for demo and debugging)
@@ -107,7 +107,7 @@ internal_api_router.include_router(
 
 
 # Include plugin registry routes (frontend plugin management)
-if settings.PLUGINS_ENABLED:
+if app_settings.PLUGINS_ENABLED:
     internal_api_router.include_router(
         plugin_registry_router, prefix="/plugins", tags=["internal-plugins"]
     )
@@ -118,13 +118,13 @@ internal_api_router.include_router(
 )
 
 # Include chatbot routes (frontend chatbot management)
-if settings.CHATBOTS_ENABLED:
+if app_settings.CHATBOTS_ENABLED:
     internal_api_router.include_router(
         chatbot_router, prefix="/chatbot", tags=["internal-chatbot"]
     )
 
 # Include extract routes (frontend extract document processing)
-if settings.EXTRACT_ENABLED:
+if app_settings.EXTRACT_ENABLED:
     internal_api_router.include_router(
         extract_router, prefix="/extract", tags=["internal-extract"]
     )
@@ -160,7 +160,7 @@ internal_api_router.include_router(
 )
 
 # Include metrics endpoint (Prometheus metrics)
-if settings.PROMETHEUS_ENABLED:
+if app_settings.PROMETHEUS_ENABLED:
     internal_api_router.include_router(metrics_router, tags=["internal-metrics"])
 
 # Include provider health routes (provider monitoring - admin only)
