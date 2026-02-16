@@ -52,12 +52,13 @@ jobs:
           file: ./Dockerfile
           build-args: |
             INSTALL_TORCH=false
+            INSTALL_PG_DEPS=false
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
 
       - name: Image digest
         if: github.event_name != 'pull_request'

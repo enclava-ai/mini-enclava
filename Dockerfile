@@ -12,7 +12,8 @@ WORKDIR /build
 COPY backend/package.json backend/package-lock.json* ./
 
 # Install dependencies
-RUN npm ci || npm install
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
 # Copy Tailwind config and source files
 COPY backend/tailwind.config.js ./
@@ -35,15 +36,24 @@ ENV PYTHONPATH=/app
 WORKDIR /app
 
 # Install system dependencies
+ARG INSTALL_PG_DEPS="true"
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        libpq-dev \
-        postgresql-client \
-        curl \
-        ffmpeg \
-        poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
+    if [ "$INSTALL_PG_DEPS" = "true" ]; then \
+        apt-get install -y --no-install-recommends \
+            build-essential \
+            libpq-dev \
+            postgresql-client \
+            curl \
+            ffmpeg \
+            poppler-utils ; \
+    else \
+        apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            ffmpeg \
+            poppler-utils ; \
+    fi && \
+    rm -rf /var/lib/apt/lists/*
 
 # Optional CPU-only PyTorch install for ML-dependent features (disabled by default in sqlite/extract-only flows)
 ARG INSTALL_TORCH="true"
@@ -59,7 +69,8 @@ fi
 
 # Copy requirements and install Python dependencies
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
 # Copy application code
 COPY backend/app ./app

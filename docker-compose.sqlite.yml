@@ -21,6 +21,7 @@ services:
       dockerfile: Dockerfile
       args:
         INSTALL_TORCH: "false"
+        INSTALL_PG_DEPS: "false"
     environment:
       # SQLite database
       - DATABASE_URL=sqlite:////app/data/enclava.db

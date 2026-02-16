@@ -10,6 +10,9 @@ WORKDIR /app
 
 # Install system dependencies
 ARG BUILD_DNS_SERVERS="10.0.2.3 10.88.0.1 1.1.1.1 8.8.8.8"
+ARG INSTALL_PG_DEPS="true"
+ARG INSTALL_BUILD_DEPS="true"
+ARG REQUIREMENTS_FILE="requirements.txt"
 RUN set -eux; \
     # Work around rootless userns + systemd-resolved DNS during image builds
     if ! grep -q "^nameserver" /etc/resolv.conf || grep -q "127.0.0.53" /etc/resolv.conf; then \
@@ -31,19 +34,18 @@ RUN set -eux; \
         -o Dir::State::Lists="$apt_lists" \
         -o Dir::Cache::Archives="$apt_cache" \
         install -y --no-install-recommends \
-            build-essential \
-            libpq-dev \
-            postgresql-client \
+            $([ "$INSTALL_BUILD_DEPS" = "true" ] && echo "build-essential") \
             curl \
-            ffmpeg \
             poppler-utils \
+            $([ "$INSTALL_PG_DEPS" = "true" ] && echo "libpq-dev postgresql-client") \
     ; \
     rm -rf "$apt_lists" "$apt_cache"
 
 # Install CPU-only PyTorch and compatible numpy first (faster download)
 ARG INSTALL_TORCH="true"
 ARG TORCH_VERSION="2.6.0"
-RUN if [ "$INSTALL_TORCH" = "true" ]; then \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$INSTALL_TORCH" = "true" ]; then \
     pip install --no-cache-dir \
         torch==${TORCH_VERSION}+cpu \
         --index-url https://download.pytorch.org/whl/cpu \
@@ -53,8 +55,9 @@ else \
 fi
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY ${REQUIREMENTS_FILE} .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
 # Optional: Download spaCy English model for NLP processing (commented out for faster builds)
 # Uncomment if you install requirements-nlp.txt and need entity extraction
