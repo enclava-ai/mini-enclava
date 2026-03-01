@@ -79,6 +79,33 @@ docker compose up --build -d
 
 See `.env.example` for all available configuration options.
 
+## Attestation Policy Artifacts
+
+On every tagged release (`v*.*.*`), GitHub Actions now generates a digest-pinned
+attestation policy for the pushed container image.
+
+- Workflow: `.github/workflows/mini-build.yml`
+- Generator script: `.github/scripts/generate_attestation_policy.py`
+- Release assets:
+  - `mini-enclava-attestation-policy-<tag>.json`
+  - `mini-enclava-attestation-policy-<tag>.json.sha256`
+  - `mini-enclava-attestation-policy-<tag>.json.sigstore.json`
+  - `mini-enclava-attestation-policy-<tag>.json.verify.txt`
+
+This lets clients download the policy directly from the release assets and
+verify attestation without manual policy generation.
+
+Policy signatures use keyless Sigstore (`cosign`) with GitHub OIDC identity.
+Clients can verify authenticity with:
+
+```bash
+cosign verify-blob \
+  --bundle mini-enclava-attestation-policy-<tag>.json.sigstore.json \
+  --certificate-identity "https://github.com/<org>/<repo>/.github/workflows/mini-build.yml@refs/tags/<tag>" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  mini-enclava-attestation-policy-<tag>.json
+```
+
 
 ## Support
 
@@ -89,4 +116,3 @@ See `.env.example` for all available configuration options.
 
 
 ---
-

@@ -5,16 +5,23 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag label used in generated policy filename (defaults to git ref name)"
+        required: false
+        type: string
 
 env:
   IMAGE_NAME: mini-enclava
   REGISTRY: ghcr.io
+  POLICY_BASENAME: mini-enclava-attestation-policy
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
+      id-token: write
       packages: write
       # OIDC token is automatically available via GITHUB_TOKEN
       # No additional secrets needed!
@@ -46,6 +53,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -67,3 +75,84 @@ jobs:
         run: |
           echo "Image pushed successfully"
           echo "Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Digest: ${{ steps.build.outputs.digest }}"
+
+      - name: Resolve policy metadata
+        if: github.event_name != 'pull_request'
+        id: policy_meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+          else
+            IMAGE_TAG="${GITHUB_REF_NAME}"
+          fi
+          SAFE_IMAGE_TAG="$(printf '%s' "${IMAGE_TAG}" | sed -E 's/[^A-Za-z0-9._-]+/-/g')"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          POLICY_FILE="${{ env.POLICY_BASENAME }}-${SAFE_IMAGE_TAG}.json"
+          echo "image_tag=${SAFE_IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_tag_original=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+          echo "policy_file=${POLICY_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate attestation policy
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          mkdir -p dist/attestation
+          python3 .github/scripts/generate_attestation_policy.py \
+            --output "dist/attestation/${{ steps.policy_meta.outputs.policy_file }}" \
+            --workload-image "${{ steps.policy_meta.outputs.image_ref }}" \
+            --source-ref "${GITHUB_REF}" \
+            --image-tag "${{ steps.policy_meta.outputs.image_tag_original }}"
+
+      - name: Generate checksums
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          cd dist/attestation
+          sha256sum "${{ steps.policy_meta.outputs.policy_file }}" > "${{ steps.policy_meta.outputs.policy_file }}.sha256"
+
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Keyless sign attestation policy
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          POLICY_PATH="dist/attestation/${{ steps.policy_meta.outputs.policy_file }}"
+          BUNDLE_PATH="${POLICY_PATH}.sigstore.json"
+          cosign sign-blob --yes --bundle "${BUNDLE_PATH}" "${POLICY_PATH}"
+
+      - name: Write verification hints
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          POLICY_PATH="dist/attestation/${{ steps.policy_meta.outputs.policy_file }}"
+          printf '%s\n' \
+            "cosign verify-blob \\" \
+            "  --bundle \"${{ steps.policy_meta.outputs.policy_file }}.sigstore.json\" \\" \
+            "  --certificate-identity \"https://github.com/${GITHUB_REPOSITORY}/.github/workflows/mini-build.yml@${GITHUB_REF}\" \\" \
+            "  --certificate-oidc-issuer \"https://token.actions.githubusercontent.com\" \\" \
+            "  \"${{ steps.policy_meta.outputs.policy_file }}\"" \
+            > "${POLICY_PATH}.verify.txt"
+
+      - name: Upload policy artifacts
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: attestation-policy-${{ steps.policy_meta.outputs.image_tag }}
+          path: dist/attestation/*
+          if-no-files-found: error
+
+      - name: Attach policy assets to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/attestation/${{ steps.policy_meta.outputs.policy_file }}
+            dist/attestation/${{ steps.policy_meta.outputs.policy_file }}.sha256
+            dist/attestation/${{ steps.policy_meta.outputs.policy_file }}.sigstore.json
+            dist/attestation/${{ steps.policy_meta.outputs.policy_file }}.verify.txt

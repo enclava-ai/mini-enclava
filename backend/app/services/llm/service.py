@@ -819,6 +819,14 @@ class LLMService:
         """
         # Import here to avoid circular dependency
         from .attestation.scheduler import attestation_scheduler
+        from app.core.config import settings
+
+        def attestation_permits(provider_name: str) -> bool:
+            # Development mode: allow provider routing even when remote attestation
+            # checks are intentionally skipped.
+            if settings.SKIP_ATTESTATION_CHECK:
+                return True
+            return attestation_scheduler.is_healthy(provider_name)
 
         # 1. Check Chatbot-specific preferences (if applicable)
         if chatbot_id and db:
@@ -835,7 +843,7 @@ class LLMService:
                     
                     # If preferred provider is set and valid, check availability
                     if preferred_id and preferred_id in self._providers:
-                        if attestation_scheduler.is_healthy(preferred_id):
+                        if attestation_permits(preferred_id):
                             # Also check if model is supported if we're not just defaulting
                             provider = self._providers[preferred_id]
                             if provider.supports_model(model):
@@ -847,18 +855,18 @@ class LLMService:
         provider_name = config_manager.get_provider_for_model(model)
         if provider_name and provider_name in self._providers:
             # Verify provider is healthy
-            if attestation_scheduler.is_healthy(provider_name):
+            if attestation_permits(provider_name):
                 return provider_name
 
         # 3. Fall back to any healthy provider that supports the model
         for name, provider in self._providers.items():
-            if provider.supports_model(model) and attestation_scheduler.is_healthy(name):
+            if provider.supports_model(model) and attestation_permits(name):
                 return name
 
         # 4. Use default provider as last resort (if healthy)
         config = config_manager.get_config()
         if config.default_provider in self._providers:
-            if attestation_scheduler.is_healthy(config.default_provider):
+            if attestation_permits(config.default_provider):
                 return config.default_provider
 
         # 5. Degraded mode: If no healthy providers, try any provider that supports the model

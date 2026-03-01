@@ -36,6 +36,9 @@ RUN set -eux; \
         install -y --no-install-recommends \
             $([ "$INSTALL_BUILD_DEPS" = "true" ] && echo "build-essential") \
             curl \
+            cryptsetup \
+            e2fsprogs \
+            util-linux \
             poppler-utils \
             $([ "$INSTALL_PG_DEPS" = "true" ] && echo "libpq-dev postgresql-client") \
     ; \

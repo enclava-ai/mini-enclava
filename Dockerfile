@@ -40,18 +40,19 @@ ARG INSTALL_PG_DEPS="true"
 ARG INSTALL_BUILD_DEPS="true"
 ARG INSTALL_PDF_DEPS="true"
 ARG REQUIREMENTS_FILE="backend/requirements.txt"
-RUN apt-get update && \
+RUN set -eux; \
+    apt-get update; \
+    PACKAGES="ca-certificates curl cryptsetup e2fsprogs util-linux"; \
+    if [ "$INSTALL_BUILD_DEPS" = "true" ]; then \
+      PACKAGES="$PACKAGES build-essential"; \
+    fi; \
+    if [ "$INSTALL_PDF_DEPS" = "true" ]; then \
+      PACKAGES="$PACKAGES poppler-utils"; \
+    fi; \
     if [ "$INSTALL_PG_DEPS" = "true" ]; then \
-        apt-get install -y --no-install-recommends \
-            $([ "$INSTALL_BUILD_DEPS" = "true" ] && echo "build-essential") \
-            libpq-dev \
-            postgresql-client \
-            $([ "$INSTALL_PDF_DEPS" = "true" ] && echo "poppler-utils") ; \
-    else \
-        apt-get install -y --no-install-recommends \
-            $([ "$INSTALL_BUILD_DEPS" = "true" ] && echo "build-essential") \
-            $([ "$INSTALL_PDF_DEPS" = "true" ] && echo "poppler-utils") ; \
-    fi && \
+      PACKAGES="$PACKAGES libpq-dev postgresql-client"; \
+    fi; \
+    apt-get install -y --no-install-recommends $PACKAGES; \
     rm -rf /var/lib/apt/lists/*
 
 # Optional CPU-only PyTorch install for ML-dependent features (disabled by default in sqlite/extract-only flows)
@@ -87,6 +88,11 @@ COPY backend/app/static/js ./app/static/js
 
 # Create logs directory
 RUN mkdir -p logs
+
+# Non-root runtime identity for secure-pv handoff.
+RUN groupadd --system --gid 10001 enclava && \
+    useradd --system --uid 10001 --gid enclava --home-dir /app --shell /usr/sbin/nologin enclava && \
+    chown -R 10001:10001 /app
 
 # Expose port
 EXPOSE 8000

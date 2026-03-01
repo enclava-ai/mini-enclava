@@ -1,5 +1,7 @@
 """Settings Web Routes"""
 
+import logging
+
 from fastapi import APIRouter, Depends, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,7 @@ from app.models.user import User
 from app.services.llm.service import llm_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -36,24 +39,26 @@ async def settings_page(
     # Get LLM provider status
     llm_providers = []
     try:
-        provider_health = await llm_service.get_provider_health()
-        for provider_name, health_info in provider_health.items():
+        provider_health = await llm_service.get_providers_health(db)
+        for provider_info in provider_health:
             models = []
-            try:
-                provider_models = await llm_service.get_models(provider_name)
-                models = [{"id": m.id, "name": m.name or m.id} for m in provider_models]
-            except Exception:
-                pass
+            for model in provider_info.get("models", []):
+                model_id = model.get("id")
+                models.append({
+                    "id": model_id,
+                    "name": model_id,
+                })
 
+            is_healthy = bool(provider_info.get("healthy"))
             llm_providers.append({
-                "name": provider_name,
-                "healthy": health_info.get("status") == "healthy",
-                "status": health_info.get("status", "unknown"),
+                "name": provider_info.get("provider_id", "unknown"),
+                "healthy": is_healthy,
+                "status": "healthy" if is_healthy else "unhealthy",
                 "models": models,
                 "model_count": len(models),
             })
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to fetch LLM provider status for settings page: %s", exc)
 
     return templates.TemplateResponse(
         "pages/settings/index.html",
